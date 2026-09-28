@@ -1,0 +1,27 @@
+# Local credentials and development secrets
+.env
+.env.*
+.dev.vars
+.dev.vars.*
+
+# Node.js and Cloudflare development artifacts
+node_modules/
+dist/
+coverage/
+.wrangler/
+
+# Python prototype artifacts
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+
+# Local proof runs and memory databases
+.proof-runs/
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+
+# OS metadata
+.DS_Store
