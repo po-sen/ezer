@@ -48,5 +48,39 @@ npm run check:staged
 Use `npm run format:check -- <files>` to check explicit files without modifying
 them. Hook checks run locally without calling a model or a remote service.
 Service linting, type checking, and tests will be added with the TypeScript
-service package. Hooks are a local convenience; CI enforcement is not configured
-yet.
+service package.
+
+### Continuous integration
+
+Run the same full check as CI with:
+
+```sh
+npm run check
+```
+
+This checks all indexed paths before formatting supported tracked files, even
+when no changes are staged. It reads working-tree contents and excludes untracked
+drafts. Stage intended new files before running it; use `check:staged` to validate
+a partially staged commit. Neither command reformats files.
+
+GitHub Actions runs `Repository checks` on Node.js 24 for every PR targeting
+`main`, including drafts and documentation changes, and for pushes to `main`.
+It installs from the lockfile, uses read-only repository permissions, and does
+not require project secrets. The `main` ruleset must require this check; workflow
+files alone do not enforce merge protection.
+
+### Working with agents
+
+Read [AGENTS.md](AGENTS.md) for repository instructions, available commands, and
+completion criteria. It is the shared source for compatible agents; the small
+[CLAUDE.md](CLAUDE.md) entry point imports it for Claude Code. Confirm that your
+host loads these instructions before starting work, especially when using custom
+instruction settings. These files govern development, not the installed plugin's
+runtime behavior.
+
+Use the **Development task** issue form for work that benefits from explicit
+problem statements, acceptance criteria, scope, and a validation plan. Small,
+clear changes may go directly to a PR. Keep each PR focused, provide actual
+validation results, and leave the final review and merge decision to the
+maintainer. Instructions and local hooks supplement CI; they do not enforce
+permissions or replace review.

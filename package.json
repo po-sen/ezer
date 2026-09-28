@@ -8,6 +8,7 @@
   },
   "scripts": {
     "prepare": "husky",
+    "check": "node scripts/check-repository.ts",
     "check:staged": "node scripts/check-staged-paths.ts && lint-staged --config .lintstagedrc.json",
     "format": "prettier --write",
     "format:check": "prettier --check"
