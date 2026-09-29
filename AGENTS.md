@@ -64,6 +64,20 @@ Delivery uses inbound ports, and bootstrap only composes implementations. Add
 layers when they have real responsibilities, not as empty scaffolding. Extend
 architecture checks when introducing a new context or allowed dependency.
 
+## TypeScript public functions
+
+Each repository-owned TypeScript module may expose at most one public function.
+Public means a callable runtime export, including named/default functions,
+function-valued variables, and re-exported functions. Count exported names, not
+overload signatures. Keep additional helpers private to the module or move
+independent public functions into separate files.
+
+Unexported helpers, nested callbacks, type-only exports, and interface method
+signatures do not count. Files containing only types, configuration, or a Worker
+handler object may have no exported function. This convention concerns module
+exports, not methods belonging to an object or class. Apply it to application
+code, tests, and development scripts, and check it during diff review.
+
 ## GitHub account
 
 Use the `po-sen` GitHub account for all GitHub CLI operations targeting

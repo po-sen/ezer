@@ -44,6 +44,12 @@ Codex/Claude Code compatibility still require separate acceptance tests.
 surface, `application/` implements it, and `delivery/` adapts HTTP and MCP. The
 entry point delegates to `bootstrap/`, which wires these pieces together.
 
+`bootstrap/worker-types.d.ts` merges the entry point's type into
+`Cloudflare.GlobalProps.mainModule`. This lets TypeScript check calls such as
+`exports.default.fetch()` from `cloudflare:workers` in the integration tests.
+It is a hand-maintained declaration for the current entry point, emits no runtime
+code, and contains no memory model or storage configuration.
+
 Add `domain/` when memory entities, value objects, and invariants are introduced.
 Add focused `outboundport/` capabilities and `infrastructure/` implementations
 when persistence or other external effects are needed. Do not create empty
