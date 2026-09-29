@@ -32,5 +32,8 @@ jobs:
         run: npm ci
         env:
           HUSKY: "0"
-      - name: Check tracked files
+      - name: Validate repository and services
         run: npm run check
+        env:
+          WRANGLER_SEND_METRICS: "false"
+          CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV: "false"

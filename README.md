@@ -13,10 +13,10 @@ is not yet available.
 
 ## Development
 
-The planned memory service uses TypeScript and targets Cloudflare Workers. The
-repository currently provides development tooling; the service package has not
-been implemented yet. Installing the plugin will not require these development
-dependencies.
+The memory service uses TypeScript and targets Cloudflare Workers. The
+repository includes its initial MCP service foundation and development tooling.
+Memory persistence and authentication are not implemented yet. Installing the
+plugin will not require these development dependencies.
 
 Use Node.js 24 or later and npm. From a Git checkout, install the locked
 development dependencies and activate the local Git hooks:
@@ -47,8 +47,8 @@ npm run check:staged
 
 Use `npm run format:check -- <files>` to check explicit files without modifying
 them. Hook checks run locally without calling a model or a remote service.
-Service linting, type checking, and tests will be added with the TypeScript
-service package.
+The service has strict TypeScript checks, architecture checks, and MCP integration
+tests that run in the local Workers runtime.
 
 ### Continuous integration
 
@@ -61,7 +61,8 @@ npm run check
 This checks all indexed paths before formatting supported tracked files, even
 when no changes are staged. It reads working-tree contents and excludes untracked
 drafts. Stage intended new files before running it; use `check:staged` to validate
-a partially staged commit. Neither command reformats files.
+a partially staged commit. Neither command reformats files. The full check also
+runs service type checks, tests, and a local Worker bundle build.
 
 GitHub Actions runs `Repository checks` on Node.js 24 for every PR targeting
 `main`, including drafts and documentation changes, and for pushes to `main`.
@@ -83,3 +84,17 @@ to explain the problem, intended behavior, and actual validation results. Keep
 each PR focused and leave the final review and merge decision to the maintainer.
 Instructions and local hooks supplement CI; they do not enforce permissions or
 replace review.
+
+### Memory service development
+
+The [`ezer-memory` service](services/ezer-memory/README.md) exposes `/health` and
+an HTTP MCP endpoint at `/mcp`. Its only tool is `ezer_service_info`, which reports
+the current foundation's capabilities without reading or writing memory.
+
+```sh
+npm run dev --workspace @ezer/memory
+```
+
+The server listens on the development machine's loopback interface. It is not a
+shared remote memory service. See the service README for checks and current
+limitations.

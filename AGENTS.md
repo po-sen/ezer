@@ -3,8 +3,9 @@
 ## Scope and working agreements
 
 Ezer is an early-stage plugin project using Agent Skills and MCP. The planned
-memory service uses TypeScript on Cloudflare Workers; no production service is
-implemented yet. Keep product behavior portable across compatible host agents.
+memory service uses TypeScript on Cloudflare Workers. Its current foundation
+exposes service information; persistence and authentication are not implemented.
+Keep product behavior portable across compatible host agents.
 These instructions guide repository development, not Ezer's runtime personality.
 
 - Write repository files, code comments, and PR descriptions in English.
@@ -25,6 +26,7 @@ These instructions guide repository development, not Ezer's runtime personality.
 - `scripts/`: development checks; local prototype scripts are not release code.
 - `.husky/`: local pre-commit hook.
 - `.github/`: CI and pull request template.
+- `services/ezer-memory/`: Worker entry point, memory context, and service tests.
 - `AGENTS.md`: canonical instructions; `CLAUDE.md` imports this file.
 
 Use Node.js 24 (the CI version in `.node-version`) or later, and npm:
@@ -36,10 +38,19 @@ Use Node.js 24 (the CI version in `.node-version`) or later, and npm:
 | `npm run check:staged`      | Validate the staged snapshot before committing.                                                    |
 | `npm run format -- <files>` | Format explicitly selected files.                                                                  |
 
-The full check does not include untracked drafts. It reads working-tree contents,
-so use the staged check to validate partially staged commits. No build, service
-type-check, or service test command exists yet; do not claim those checks passed.
-Add relevant commands when their implementation is introduced.
+The full check does not include untracked drafts. It checks tracked working-tree
+formatting, then runs service type checks, architecture and Worker tests, and a
+local bundle build. Use the staged check to validate partially staged formatting.
+Service commands are available with `npm run <command> --workspace @ezer/memory`:
+`typecheck`, `test`, `build`, and `dev`. The build uses Wrangler's dry-run mode;
+it does not deploy. Never claim that a local test proves remote installation or
+cross-computer memory continuity.
+
+Organize service code by bounded context. Keep domain models pure and place use
+cases behind inbound ports; external effects belong behind outbound ports.
+Delivery uses inbound ports, and bootstrap only composes implementations. Add
+layers when they have real responsibilities, not as empty scaffolding. Extend
+architecture checks when introducing a new context or allowed dependency.
 
 ## GitHub account
 
@@ -84,6 +95,6 @@ Do not merge a PR unless the user explicitly requests the merge.
    diff and decides whether to merge. AI review is supplementary, not approval or
    evidence that unrun checks passed.
 
-`Repository checks` is the CI check for this tooling stage. Do not disable checks
+`Repository checks` runs repository and service validation. Do not disable checks
 or weaken repository rules to get a change merged. A ready PR is not permission
 to merge or deploy.
