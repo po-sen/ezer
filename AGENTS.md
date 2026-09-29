@@ -3,8 +3,9 @@
 ## Scope and working agreements
 
 Ezer is an early-stage plugin project using Agent Skills and MCP. The planned
-memory service uses TypeScript on Cloudflare Workers; no production service is
-implemented yet. Keep product behavior portable across compatible host agents.
+memory service uses TypeScript on Cloudflare Workers. Its current foundation
+exposes service information; persistence and authentication are not implemented.
+Keep product behavior portable across compatible host agents.
 These instructions guide repository development, not Ezer's runtime personality.
 
 - Write repository files, code comments, and PR descriptions in English.
@@ -25,21 +26,61 @@ These instructions guide repository development, not Ezer's runtime personality.
 - `scripts/`: development checks; local prototype scripts are not release code.
 - `.husky/`: local pre-commit hook.
 - `.github/`: CI and pull request template.
+- `apps/ezer-memory/`: Worker entry point, memory context, and service tests.
+- `pnpm-workspace.yaml`: workspace membership and dependency build permissions.
 - `AGENTS.md`: canonical instructions; `CLAUDE.md` imports this file.
 
-Use Node.js 24 (the CI version in `.node-version`) or later, and npm:
+Use Node.js 24 (the CI version in `.node-version`) or later, and the exact pnpm
+version pinned by `packageManager` in the root `package.json`:
 
-| Command                     | Purpose                                                                                            |
-| --------------------------- | -------------------------------------------------------------------------------------------------- |
-| `npm ci`                    | Install locked dependencies and activate local Git hooks.                                          |
-| `npm run check`             | Check indexed paths, then format-check tracked working-tree files. Stage intended new files first. |
-| `npm run check:staged`      | Validate the staged snapshot before committing.                                                    |
-| `npm run format -- <files>` | Format explicitly selected files.                                                                  |
+| Command                          | Purpose                                                                                            |
+| -------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `pnpm install --frozen-lockfile` | Install locked dependencies and activate local Git hooks.                                          |
+| `pnpm run check`                 | Check indexed paths, then format-check tracked working-tree files. Stage intended new files first. |
+| `pnpm run check:staged`          | Validate the staged snapshot before committing.                                                    |
+| `pnpm run format <files>`        | Format explicitly selected files.                                                                  |
 
-The full check does not include untracked drafts. It reads working-tree contents,
-so use the staged check to validate partially staged commits. No build, service
-type-check, or service test command exists yet; do not claim those checks passed.
-Add relevant commands when their implementation is introduced.
+The full check does not include untracked drafts. It checks tracked working-tree
+formatting, then runs service type checks, architecture and Worker tests, and a
+local bundle build. Use the staged check to validate partially staged formatting.
+Service commands are available with `pnpm --filter @ezer/memory run <command>`:
+`types`, `types:check`, `typecheck`, `test`, `build`, and `dev`.
+Worker declarations are generated with `wrangler types`; commit the output after
+configuration, export, or Wrangler changes. Never hand-edit or format
+`apps/ezer-memory/worker-configuration.d.ts`. The full check rejects stale types
+before type checking regenerates them. The build uses Wrangler's dry-run mode;
+it does not deploy. Never claim that a local test proves remote installation or
+cross-computer memory continuity.
+
+Use one root `pnpm-lock.yaml`; do not add npm or Yarn lockfiles. Keep runtime
+dependencies in the application that imports them and root dependencies limited
+to repository tooling. Review dependency lifecycle scripts before updating
+`allowBuilds`; do not enable all builds or hoist undeclared dependencies to make a
+check pass. CI must install with the frozen lockfile.
+
+Put deployable applications in `apps/` and plugin artifacts in `plugins/`. Add
+shared `packages/` only for actual reuse, with explicit exports and `workspace:`
+dependencies. Do not split DDD layers into workspace packages by default.
+
+Organize service code by bounded context. Keep domain models pure and place use
+cases behind inbound ports; external effects belong behind outbound ports.
+Delivery uses inbound ports, and bootstrap only composes implementations. Add
+layers when they have real responsibilities, not as empty scaffolding. Extend
+architecture checks when introducing a new context or allowed dependency.
+
+## TypeScript public functions
+
+Each repository-owned TypeScript module may expose at most one public function.
+Public means a callable runtime export, including named/default functions,
+function-valued variables, and re-exported functions. Count exported names, not
+overload signatures. Keep additional helpers private to the module or move
+independent public functions into separate files.
+
+Unexported helpers, nested callbacks, type-only exports, and interface method
+signatures do not count. Files containing only types, configuration, or a Worker
+handler object may have no exported function. This convention concerns module
+exports, not methods belonging to an object or class. Apply it to application
+code, tests, and development scripts, and check it during diff review.
 
 ## GitHub account
 
@@ -84,6 +125,6 @@ Do not merge a PR unless the user explicitly requests the merge.
    diff and decides whether to merge. AI review is supplementary, not approval or
    evidence that unrun checks passed.
 
-`Repository checks` is the CI check for this tooling stage. Do not disable checks
+`Repository checks` runs repository and service validation. Do not disable checks
 or weaken repository rules to get a change merged. A ready PR is not permission
 to merge or deploy.

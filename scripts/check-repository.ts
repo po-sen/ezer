@@ -42,6 +42,8 @@ for (let offset = 0; offset < files.length; offset += 100) {
     ".prettierrc.json",
     "--ignore-path",
     ".gitignore",
+    "--ignore-path",
+    ".prettierignore",
     "--",
     ...files.slice(offset, offset + 100).map((path) => `./${path}`),
   ]);

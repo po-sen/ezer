@@ -28,9 +28,17 @@ jobs:
         with:
           node-version-file: .node-version
           package-manager-cache: false
+      - name: Set up pnpm
+        uses: pnpm/setup@fbda4c85fc2e1e08721cd8763afea8f48d60f024 # v3.0.0
+        with:
+          node-version-file: "false"
+          install: false
       - name: Install locked dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
         env:
           HUSKY: "0"
-      - name: Check tracked files
-        run: npm run check
+      - name: Validate repository and applications
+        run: pnpm run check
+        env:
+          WRANGLER_SEND_METRICS: "false"
+          CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV: "false"

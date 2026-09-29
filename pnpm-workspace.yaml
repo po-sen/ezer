@@ -1,0 +1,13 @@
+packages:
+  - apps/*
+
+engineStrict: true
+pmOnFail: error
+verifyDepsBeforeRun: error
+minimumReleaseAge: 1440
+
+# Review new dependency lifecycle scripts before allowing them to execute.
+allowBuilds:
+  esbuild@0.28.1: true
+  fsevents: false
+  workerd@1.20260926.1: true
