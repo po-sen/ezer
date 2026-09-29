@@ -7,11 +7,13 @@
     "node": ">=24"
   },
   "scripts": {
-    "dev": "wrangler dev --local --ip 127.0.0.1",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p tests/tsconfig.json",
+    "dev": "pnpm run types && wrangler dev --local --ip 127.0.0.1",
+    "types": "wrangler types",
+    "types:check": "wrangler types --check",
+    "typecheck": "pnpm run types && tsc --noEmit && tsc --noEmit -p tests/tsconfig.json",
     "test": "node --test tests/architecture.test.ts && vitest run",
     "build": "wrangler deploy --dry-run --outdir dist",
-    "check": "pnpm run typecheck && pnpm test && pnpm run build"
+    "check": "pnpm run types:check && pnpm run typecheck && pnpm test && pnpm run build"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.1.0",
@@ -19,7 +21,6 @@
   },
   "devDependencies": {
     "@cloudflare/vitest-plugin": "1.3.0",
-    "@cloudflare/workers-types": "5.20260926.1",
     "@modelcontextprotocol/client": "2.1.0",
     "@types/node": "24.19.0",
     "typescript": "6.0.3",

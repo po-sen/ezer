@@ -44,7 +44,11 @@ The full check does not include untracked drafts. It checks tracked working-tree
 formatting, then runs service type checks, architecture and Worker tests, and a
 local bundle build. Use the staged check to validate partially staged formatting.
 Service commands are available with `pnpm --filter @ezer/memory run <command>`:
-`typecheck`, `test`, `build`, and `dev`. The build uses Wrangler's dry-run mode;
+`types`, `types:check`, `typecheck`, `test`, `build`, and `dev`.
+Worker declarations are generated with `wrangler types`; commit the output after
+configuration, export, or Wrangler changes. Never hand-edit or format
+`apps/ezer-memory/worker-configuration.d.ts`. The full check rejects stale types
+before type checking regenerates them. The build uses Wrangler's dry-run mode;
 it does not deploy. Never claim that a local test proves remote installation or
 cross-computer memory continuity.
 
