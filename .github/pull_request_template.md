@@ -2,7 +2,7 @@
 
 ## Summary
 
-<!-- Explain the problem, why this change is needed, and the resulting behavior. Include a before/after example or a relevant tradeoff when helpful. Link related issues or decisions; use "Closes #..." only when this PR resolves the issue. -->
+<!-- Explain the problem, why this change is needed, and the resulting behavior. Include a before/after example or a relevant tradeoff when helpful. Link relevant context or decisions when available. -->
 
 ## Validation
 

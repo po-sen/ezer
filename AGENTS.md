@@ -7,11 +7,12 @@ memory service uses TypeScript on Cloudflare Workers; no production service is
 implemented yet. Keep product behavior portable across compatible host agents.
 These instructions guide repository development, not Ezer's runtime personality.
 
-- Write repository files, code comments, issues, and PR descriptions in English.
+- Write repository files, code comments, and PR descriptions in English.
   Use the user's preferred language in conversation.
 - Before editing, identify the requested outcome, scope, and observable acceptance
   criteria. Resolve material ambiguity; do not repeat questions already answered.
-  The development task issue form is optional for small, clear changes.
+  Work directly through PRs; no issue is required. Put the problem, intended
+  behavior, and validation results in the PR description.
 - Preserve unrelated work. Architecture drafts and the Python portability
   prototype are local-only until the user explicitly authorizes their inclusion.
   Stage explicit paths; do not use blanket staging commands.
@@ -23,7 +24,7 @@ These instructions guide repository development, not Ezer's runtime personality.
 - `README.md`: project overview and developer setup.
 - `scripts/`: development checks; local prototype scripts are not release code.
 - `.husky/`: local pre-commit hook.
-- `.github/`: CI, task form, and pull request template.
+- `.github/`: CI and pull request template.
 - `AGENTS.md`: canonical instructions; `CLAUDE.md` imports this file.
 
 Use Node.js 24 (the CI version in `.node-version`) or later, and npm:

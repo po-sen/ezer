@@ -78,9 +78,8 @@ host loads these instructions before starting work, especially when using custom
 instruction settings. These files govern development, not the installed plugin's
 runtime behavior.
 
-Use the **Development task** issue form for work that benefits from explicit
-problem statements, acceptance criteria, scope, and a validation plan. Small,
-clear changes may go directly to a PR. Keep each PR focused, provide actual
-validation results, and leave the final review and merge decision to the
-maintainer. Instructions and local hooks supplement CI; they do not enforce
-permissions or replace review.
+Work directly through pull requests; no issue is required. Use the PR template
+to explain the problem, intended behavior, and actual validation results. Keep
+each PR focused and leave the final review and merge decision to the maintainer.
+Instructions and local hooks supplement CI; they do not enforce permissions or
+replace review.
