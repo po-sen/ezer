@@ -3,15 +3,13 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "workspaces": [
-    "services/ezer-memory"
-  ],
+  "packageManager": "pnpm@12.6.0",
   "engines": {
     "node": ">=24"
   },
   "scripts": {
     "prepare": "husky",
-    "check": "node scripts/check-repository.ts && npm run check --workspaces",
+    "check": "node scripts/check-repository.ts && pnpm -r run check",
     "check:staged": "node scripts/check-staged-paths.ts && lint-staged --config .lintstagedrc.json",
     "format": "prettier --write",
     "format:check": "prettier --check"

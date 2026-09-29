@@ -7,15 +7,16 @@ deployment in this foundation.
 
 ## Development
 
-From the repository root, run `npm ci`, then:
+From the repository root, use the pinned pnpm version and run
+`pnpm install --frozen-lockfile`, then:
 
-| Command                                      | Purpose                                                   |
-| -------------------------------------------- | --------------------------------------------------------- |
-| `npm run dev --workspace @ezer/memory`       | Start Wrangler locally on loopback.                       |
-| `npm run typecheck --workspace @ezer/memory` | Check source, tests, and test configuration.              |
-| `npm test --workspace @ezer/memory`          | Check dependency boundaries and exercise MCP in workerd.  |
-| `npm run build --workspace @ezer/memory`     | Produce a local bundle using `wrangler deploy --dry-run`. |
-| `npm run check`                              | Run the repository's full CI validation.                  |
+| Command                                | Purpose                                                   |
+| -------------------------------------- | --------------------------------------------------------- |
+| `pnpm --filter @ezer/memory dev`       | Start Wrangler locally on loopback.                       |
+| `pnpm --filter @ezer/memory typecheck` | Check source, tests, and test configuration.              |
+| `pnpm --filter @ezer/memory test`      | Check dependency boundaries and exercise MCP in workerd.  |
+| `pnpm --filter @ezer/memory build`     | Produce a local bundle using `wrangler deploy --dry-run`. |
+| `pnpm run check`                       | Run the repository's full CI validation.                  |
 
 No Cloudflare login or project secrets are needed for these checks. The local URL
 belongs to the machine running Wrangler. It does not prove connectivity from a

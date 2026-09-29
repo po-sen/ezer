@@ -26,25 +26,37 @@ These instructions guide repository development, not Ezer's runtime personality.
 - `scripts/`: development checks; local prototype scripts are not release code.
 - `.husky/`: local pre-commit hook.
 - `.github/`: CI and pull request template.
-- `services/ezer-memory/`: Worker entry point, memory context, and service tests.
+- `apps/ezer-memory/`: Worker entry point, memory context, and service tests.
+- `pnpm-workspace.yaml`: workspace membership and dependency build permissions.
 - `AGENTS.md`: canonical instructions; `CLAUDE.md` imports this file.
 
-Use Node.js 24 (the CI version in `.node-version`) or later, and npm:
+Use Node.js 24 (the CI version in `.node-version`) or later, and the exact pnpm
+version pinned by `packageManager` in the root `package.json`:
 
-| Command                     | Purpose                                                                                            |
-| --------------------------- | -------------------------------------------------------------------------------------------------- |
-| `npm ci`                    | Install locked dependencies and activate local Git hooks.                                          |
-| `npm run check`             | Check indexed paths, then format-check tracked working-tree files. Stage intended new files first. |
-| `npm run check:staged`      | Validate the staged snapshot before committing.                                                    |
-| `npm run format -- <files>` | Format explicitly selected files.                                                                  |
+| Command                          | Purpose                                                                                            |
+| -------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `pnpm install --frozen-lockfile` | Install locked dependencies and activate local Git hooks.                                          |
+| `pnpm run check`                 | Check indexed paths, then format-check tracked working-tree files. Stage intended new files first. |
+| `pnpm run check:staged`          | Validate the staged snapshot before committing.                                                    |
+| `pnpm run format <files>`        | Format explicitly selected files.                                                                  |
 
 The full check does not include untracked drafts. It checks tracked working-tree
 formatting, then runs service type checks, architecture and Worker tests, and a
 local bundle build. Use the staged check to validate partially staged formatting.
-Service commands are available with `npm run <command> --workspace @ezer/memory`:
+Service commands are available with `pnpm --filter @ezer/memory run <command>`:
 `typecheck`, `test`, `build`, and `dev`. The build uses Wrangler's dry-run mode;
 it does not deploy. Never claim that a local test proves remote installation or
 cross-computer memory continuity.
+
+Use one root `pnpm-lock.yaml`; do not add npm or Yarn lockfiles. Keep runtime
+dependencies in the application that imports them and root dependencies limited
+to repository tooling. Review dependency lifecycle scripts before updating
+`allowBuilds`; do not enable all builds or hoist undeclared dependencies to make a
+check pass. CI must install with the frozen lockfile.
+
+Put deployable applications in `apps/` and plugin artifacts in `plugins/`. Add
+shared `packages/` only for actual reuse, with explicit exports and `workspace:`
+dependencies. Do not split DDD layers into workspace packages by default.
 
 Organize service code by bounded context. Keep domain models pure and place use
 cases behind inbound ports; external effects belong behind outbound ports.
