@@ -8,59 +8,103 @@ import ts from "typescript";
 const sourceRoot = fileURLToPath(new URL("../src/", import.meta.url));
 const internalLayers: Record<string, readonly string[]> = {
   domain: ["domain"],
-  inboundport: ["inboundport"],
-  outboundport: ["domain", "outboundport"],
-  application: ["domain", "inboundport", "outboundport", "application"],
-  infrastructure: ["outboundport", "infrastructure"],
-  delivery: ["inboundport", "delivery"],
+  "ports/inbound": ["ports/inbound"],
+  "ports/outbound": ["domain", "ports/outbound"],
+  application: ["domain", "ports/inbound", "ports/outbound", "application"],
+  infrastructure: ["ports/outbound", "infrastructure"],
+  delivery: ["ports/inbound", "delivery"],
 };
 
+function layerOf(file: string): string {
+  const parts = file.split("/");
+  return parts[2] === "ports" ? parts.slice(2, 4).join("/") : (parts[2] ?? "");
+}
+
 function violation(file: string, dependency: string): string | undefined {
-  const [context, layer] = file.split("/");
-  if (context === "bootstrap") {
-    if (
-      dependency === "cloudflare:workers" ||
-      dependency.startsWith("../memory/") ||
-      dependency === "../../package.json"
-    )
-      return;
-    return "unregistered bootstrap dependency";
-  }
-  if (file === "index.ts") {
-    return ["./bootstrap/worker", "./bootstrap/ezer-memory"].includes(
-      dependency,
-    )
+  const target = dependency.startsWith(".")
+    ? relative(sourceRoot, resolve(sourceRoot, dirname(file), dependency))
+        .split(sep)
+        .join("/")
+        .replace(/\.ts$/, "")
+    : dependency;
+  if (file.startsWith("entrypoints/")) {
+    const allowed: Record<string, string[]> = {
+      "entrypoints/worker.ts": [
+        "bootstrap/create-worker",
+        "entrypoints/ezer-memory",
+      ],
+      "entrypoints/ezer-memory.ts": [
+        "cloudflare:workers",
+        "bootstrap/create-memory",
+      ],
+      "entrypoints/migrate-sqlite.ts": [
+        "node:util",
+        "bootstrap/create-sqlite-migrator",
+      ],
+      "entrypoints/migrate-postgresql.ts": [
+        "node:util",
+        "bootstrap/create-postgresql-migrator",
+      ],
+    };
+    return allowed[file]?.includes(target)
       ? undefined
-      : "entry point must delegate to bootstrap";
+      : "entrypoint must delegate to its bootstrap";
   }
+  if (file.startsWith("bootstrap/")) {
+    return dependency.startsWith(".") &&
+      (target.startsWith("modules/memory/") || target === "../package.json")
+      ? undefined
+      : "unregistered bootstrap dependency";
+  }
+  const layer = layerOf(file);
   if (
-    context !== "memory" ||
-    layer === undefined ||
+    !file.startsWith("modules/memory/") ||
     !Object.hasOwn(internalLayers, layer)
-  ) {
+  )
     return "unregistered context or layer";
-  }
   if (!dependency.startsWith(".")) {
+    const persistence = "modules/memory/infrastructure/persistence/";
+    const externals: Record<string, string[]> = {
+      [`${persistence}durable-object/migrate-memory.ts`]: [
+        "durable-utils/sql-migrations",
+      ],
+      [`${persistence}sqlite/open-database.ts`]: ["node:sqlite"],
+      [`${persistence}sqlite/create-migration-runner.ts`]: [
+        "node:crypto",
+        "node:fs",
+        "node:path",
+        "node:sqlite",
+        "node:url",
+        "postgrator",
+      ],
+      [`${persistence}sqlite/inspect-migrations.ts`]: [
+        "node:sqlite",
+        "postgrator",
+      ],
+      [`${persistence}sqlite/migrate-memory.ts`]: ["node:sqlite", "postgrator"],
+      [`${persistence}postgresql/open-database.ts`]: ["pg"],
+      [`${persistence}postgresql/read-migration-plan.ts`]: [
+        "node:crypto",
+        "node:fs",
+        "node:path",
+        "node:url",
+      ],
+      [`${persistence}postgresql/inspect-migrations.ts`]: ["pg"],
+      [`${persistence}postgresql/migrate-memory.ts`]: [
+        "pg",
+        "node:path",
+        "node-pg-migrate",
+      ],
+    };
     if (
-      file ===
-        "memory/infrastructure/persistence/durable-object/migrate-memory.ts" &&
-      dependency === "durable-utils/sql-migrations"
-    )
-      return;
-    if (
-      layer === "delivery" &&
-      ["@modelcontextprotocol/server", "zod"].includes(dependency)
+      externals[file]?.includes(dependency) ||
+      (layer === "delivery" &&
+        ["@modelcontextprotocol/server", "zod"].includes(dependency))
     )
       return;
     return "external dependency in an inner layer or unregistered adapter";
   }
-  const target = relative(
-    sourceRoot,
-    resolve(sourceRoot, dirname(file), dependency),
-  )
-    .split(sep)
-    .join("/");
-  const [targetContext, targetLayer] = target.split("/");
+  const targetLayer = layerOf(target);
   if (layer === "infrastructure" && targetLayer === "infrastructure") {
     const sourceDirectory = dirname(file);
     const targetDirectory = dirname(target);
@@ -71,14 +115,10 @@ function violation(file: string, dependency: string): string | undefined {
     )
       return "infrastructure cannot import a sibling directory";
   }
-  if (targetContext !== context)
+  if (!target.startsWith("modules/memory/"))
     return "cross-context dependency outside an explicit integration";
-  if (
-    targetLayer === undefined ||
-    !internalLayers[layer]!.includes(targetLayer)
-  ) {
+  if (!internalLayers[layer]!.includes(targetLayer))
     return "dependency points outside the allowed layers";
-  }
 }
 
 function sourceFiles(directory: string): string[] {
@@ -136,42 +176,69 @@ test("production imports respect context ownership and inward dependencies", () 
 
 test("the boundary guard rejects SDK leakage, reversed dependencies, and foreign domains", () => {
   for (const [file, dependency] of [
-    ["memory/domain/memory.ts", "@modelcontextprotocol/server"],
-    ["memory/inboundport/commit-memory.ts", "../domain/memory-revision"],
-    ["memory/outboundport/revision-store.ts", "../inboundport/inspect-memory"],
+    ["modules/memory/domain/memory.ts", "@modelcontextprotocol/server"],
     [
-      "memory/infrastructure/request-fingerprint.ts",
+      "modules/memory/ports/inbound/commit-memory.ts",
+      "../../domain/memory-revision",
+    ],
+    [
+      "modules/memory/ports/outbound/revision-store.ts",
+      "../inbound/inspect-memory",
+    ],
+    [
+      "modules/memory/infrastructure/request-fingerprint.ts",
       "durable-utils/sql-migrations",
     ],
-    ["memory/application/remember.ts", "../infrastructure/sqlite"],
-    ["memory/delivery/mcp.ts", "../application/remember"],
-    ["memory/inboundport/recall.ts", "cloudflare:workers"],
-    ["memory/application/recall.ts", "../../identity/domain/owner"],
-    ["memory/application/recall.ts", "@/memory/infrastructure/sqlite"],
-    ["memory/domain/memory.ts", "../infrastructure/sqlite-memory-store"],
+    ["modules/memory/application/remember.ts", "../infrastructure/sqlite"],
+    ["modules/memory/delivery/mcp.ts", "../application/remember"],
+    ["modules/memory/ports/inbound/recall.ts", "cloudflare:workers"],
+    ["modules/memory/application/recall.ts", "../../identity/domain/owner"],
     [
-      "memory/infrastructure/sqlite-memory-store.ts",
+      "modules/memory/application/recall.ts",
+      "@/modules/memory/infrastructure/sqlite",
+    ],
+    [
+      "modules/memory/domain/memory.ts",
+      "../infrastructure/sqlite-memory-store",
+    ],
+    [
+      "modules/memory/infrastructure/sqlite-memory-store.ts",
       "../application/commit-memory",
     ],
-    ["index.ts", "./memory/infrastructure/sqlite-memory-store"],
     [
-      "memory/infrastructure/persistence/sqlite/session.ts",
+      "entrypoints/worker.ts",
+      "../modules/memory/infrastructure/sqlite-memory-store",
+    ],
+    [
+      "modules/memory/infrastructure/persistence/sqlite/session.ts",
       "../durable-object/session",
     ],
     [
-      "memory/infrastructure/persistence/durable-object/unit-of-work.ts",
+      "modules/memory/infrastructure/persistence/durable-object/unit-of-work.ts",
       "../sqlite/revision-store",
     ],
     [
-      "memory/infrastructure/persistence/durable-object/migrate-memory.ts",
+      "modules/memory/infrastructure/persistence/durable-object/migrate-memory.ts",
       "../sqlite/migrations/generated",
     ],
     [
-      "memory/infrastructure/persistence/durable-object/session.ts",
+      "modules/memory/infrastructure/persistence/durable-object/session.ts",
       "../../../domain/memory-revision",
     ],
     [
-      "memory/infrastructure/persistence/sqlite/migrate-memory.ts",
+      "entrypoints/migrate-sqlite.ts",
+      "../modules/memory/infrastructure/persistence/sqlite/migrate-memory.ts",
+    ],
+    [
+      "modules/memory/infrastructure/persistence/postgresql/migrate-memory.ts",
+      "../sqlite/migrations/generated.ts",
+    ],
+    [
+      "modules/memory/infrastructure/persistence/sqlite/migrate-memory.ts",
+      "../postgresql/read-migration-plan.ts",
+    ],
+    [
+      "modules/memory/infrastructure/persistence/sqlite/migrate-memory.ts",
       "durable-utils/sql-migrations",
     ],
   ] as const) {
@@ -181,16 +248,19 @@ test("the boundary guard rejects SDK leakage, reversed dependencies, and foreign
     );
   }
   assert.equal(
-    violation("memory/application/recall.ts", "../inboundport/recall"),
+    violation(
+      "modules/memory/application/recall.ts",
+      "../ports/inbound/recall",
+    ),
     undefined,
   );
   assert.equal(
-    violation("memory/delivery/mcp.ts", "@modelcontextprotocol/server"),
+    violation("modules/memory/delivery/mcp.ts", "@modelcontextprotocol/server"),
     undefined,
   );
   assert.equal(
     violation(
-      "memory/infrastructure/persistence/durable-object/unit-of-work.ts",
+      "modules/memory/infrastructure/persistence/durable-object/unit-of-work.ts",
       "./revision-store",
     ),
     undefined,
@@ -208,7 +278,7 @@ test("infrastructure boundaries include type imports and re-exports", () => {
   ]) {
     assert(
       importViolations(
-        "memory/infrastructure/persistence/durable-object/x.ts",
+        "modules/memory/infrastructure/persistence/durable-object/x.ts",
         source,
       ).length > 0,
       source,
@@ -218,11 +288,11 @@ test("infrastructure boundaries include type imports and re-exports", () => {
     "./session",
     "./migrations/generated",
     "../contract",
-    "../../../outboundport/unit-of-work",
+    "../../../ports/outbound/unit-of-work",
   ]) {
     assert.equal(
       violation(
-        "memory/infrastructure/persistence/durable-object/x.ts",
+        "modules/memory/infrastructure/persistence/durable-object/x.ts",
         dependency,
       ),
       undefined,
@@ -233,20 +303,25 @@ test("infrastructure boundaries include type imports and re-exports", () => {
 function responsibilityViolations(file: string, text: string): string[] {
   const failures: string[] = [];
   const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
-  const layer = file.split("/")[1];
+  const layer = layerOf(file);
   const generatedSql = [
-    "memory/infrastructure/persistence/sqlite/migrations/generated.ts",
-    "memory/infrastructure/persistence/durable-object/migrations/generated.ts",
+    "modules/memory/infrastructure/persistence/sqlite/migrations/generated.ts",
+    "modules/memory/infrastructure/persistence/durable-object/migrations/generated.ts",
   ].includes(file);
-  const sqlite = file.startsWith("memory/infrastructure/persistence/sqlite/");
+  const sqlite = file.startsWith(
+    "modules/memory/infrastructure/persistence/sqlite/",
+  );
   const persistence =
     sqlite ||
-    file.startsWith("memory/infrastructure/persistence/durable-object/");
+    file.startsWith(
+      "modules/memory/infrastructure/persistence/durable-object/",
+    ) ||
+    file.startsWith("modules/memory/infrastructure/persistence/postgresql/");
   const inner = [
     "domain",
     "application",
-    "inboundport",
-    "outboundport",
+    "ports/inbound",
+    "ports/outbound",
   ].includes(layer ?? "");
   const inspect = (node: ts.Node) => {
     if (
@@ -315,41 +390,47 @@ test("source responsibilities exclude native handles, embedded DDL, and bootstra
     );
   }
   for (const [file, text] of [
-    ["memory/domain/x.ts", "const now = Date.now();"],
-    ["memory/application/x.ts", "let storage: DurableObjectStorage;"],
+    ["modules/memory/domain/x.ts", "const now = Date.now();"],
+    ["modules/memory/application/x.ts", "let storage: DurableObjectStorage;"],
     [
-      "memory/infrastructure/persistence/sqlite/x.ts",
+      "modules/memory/infrastructure/persistence/sqlite/x.ts",
       "const sql = `CREATE TABLE hidden (id INTEGER)`;",
     ],
     ["bootstrap/x.ts", "if (owner) save();"],
-    ["memory/application/x.ts", "const sql = 'SELECT * FROM revisions';"],
     [
-      "memory/infrastructure/persistence/sqlite/x.ts",
+      "modules/memory/application/x.ts",
+      "const sql = 'SELECT * FROM revisions';",
+    ],
+    [
+      "modules/memory/infrastructure/persistence/sqlite/x.ts",
       "let storage: DurableObjectStorage;",
     ],
     [
-      "memory/infrastructure/persistence/sqlite/x.ts",
+      "modules/memory/infrastructure/persistence/sqlite/x.ts",
       "type Value = SqlStorageValue;",
     ],
     [
-      "memory/infrastructure/request-fingerprint.ts",
+      "modules/memory/infrastructure/request-fingerprint.ts",
       "const sql = 'SELECT * FROM state';",
     ],
   ])
     assert(responsibilityViolations(file!, text!).length > 0, file);
 });
 
-test("SQLite compiles without Cloudflare or other runtime declarations", () => {
+test("SQLite compiles with Node declarations and without Cloudflare", () => {
   const program = ts.createProgram(
     sourceFiles(
-      resolve(sourceRoot, "memory/infrastructure/persistence/sqlite"),
+      resolve(sourceRoot, "modules/memory/infrastructure/persistence/sqlite"),
     ),
     {
       target: ts.ScriptTarget.ES2022,
       module: ts.ModuleKind.ESNext,
       moduleResolution: ts.ModuleResolutionKind.Bundler,
       lib: ["lib.es2022.d.ts"],
-      types: [],
+      types: ["node"],
+      typeRoots: [resolve(sourceRoot, "../node_modules/@types")],
+      allowImportingTsExtensions: true,
+      skipLibCheck: true,
       strict: true,
       noUncheckedIndexedAccess: true,
       exactOptionalPropertyTypes: true,

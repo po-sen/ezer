@@ -1,19 +1,19 @@
 import { env } from "cloudflare:workers";
 import { runInDurableObject } from "cloudflare:test";
 import { expect, it } from "vitest";
-import { assertSupportedSchema } from "../src/memory/infrastructure/persistence/sqlite/assert-supported-schema";
-import { initializeIndividual } from "../src/memory/infrastructure/persistence/sqlite/initialize-individual";
-import { createIndividualStateStore } from "../src/memory/infrastructure/persistence/sqlite/individual-state-store";
-import { createOperationStore } from "../src/memory/infrastructure/persistence/sqlite/operation-store";
-import { createRevisionStore } from "../src/memory/infrastructure/persistence/sqlite/revision-store";
+import { assertSupportedSchema } from "../src/modules/memory/infrastructure/persistence/sqlite/assert-supported-schema.ts";
+import { initializeIndividual } from "../src/modules/memory/infrastructure/persistence/sqlite/initialize-individual.ts";
+import { createIndividualStateStore } from "../src/modules/memory/infrastructure/persistence/sqlite/individual-state-store.ts";
+import { createOperationStore } from "../src/modules/memory/infrastructure/persistence/sqlite/operation-store.ts";
+import { createRevisionStore } from "../src/modules/memory/infrastructure/persistence/sqlite/revision-store.ts";
 import {
   migrations,
   reversals,
-} from "../src/memory/infrastructure/persistence/sqlite/migrations/generated";
+} from "../src/modules/memory/infrastructure/persistence/sqlite/migrations/generated.ts";
 import type {
   SqlSession,
   SqlValue,
-} from "../src/memory/infrastructure/persistence/sqlite/session";
+} from "../src/modules/memory/infrastructure/persistence/sqlite/session.ts";
 
 it("exercises SQLite-owned migrations and Stores without the Durable Object adapter", async () => {
   await runInDurableObject(

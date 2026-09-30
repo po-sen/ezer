@@ -3,30 +3,58 @@ import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 // Package each adapter independently; never copy or synchronize migration histories.
-for (const adapter of ["sqlite", "durable-object"]) {
+for (const adapter of ["sqlite", "durable-object", "postgresql"]) {
   verifyMigrations(adapter);
 }
 
 function verifyMigrations(adapter: string): void {
   const directory = new URL(
-    `../src/memory/infrastructure/persistence/${adapter}/migrations/`,
+    `../src/modules/memory/infrastructure/persistence/${adapter}/migrations/`,
     import.meta.url,
   );
   const files = readdirSync(directory)
-    .filter((file) => file.endsWith(".sql"))
+    .filter(
+      (file) =>
+        file.endsWith(".sql") ||
+        (adapter === "postgresql" && file.endsWith(".ts")),
+    )
     .sort();
-  const up = files.filter((file) => file.endsWith(".up.sql"));
-  if (up.length === 0 || files.length !== up.length * 2)
+  const sqlite = adapter === "sqlite";
+  const scripts = files.filter((file) => file.endsWith(".ts"));
+  const up = files.filter((file) =>
+    sqlite ? file.includes(".do.") : file.endsWith(".up.sql"),
+  );
+  if (up.length === 0 || files.length !== up.length * 2 + scripts.length)
     throw new Error("Every migration needs one SQL pair");
   const pins: Record<string, string> = {};
-  const migrations = up.map((file, index) => {
+  const ordered = [...up, ...scripts].sort();
+  const migrations = ordered.map((file, index) => {
+    if (file.endsWith(".ts")) {
+      if (
+        !new RegExp(`^${String(index + 1).padStart(6, "0")}_\\w+\\.ts$`).test(
+          file,
+        )
+      )
+        throw new Error("Migration versions must be continuous");
+      const bytes = readFileSync(new URL(file, directory));
+      pins[file] = createHash("sha256").update(bytes).digest("hex");
+      return {
+        idMonotonicInc: index + 1,
+        description: file.slice(7, -3),
+        sql: "",
+      };
+    }
     if (
       !new RegExp(
-        `^${String(index + 1).padStart(6, "0")}_\\w+\\.up\\.sql$`,
+        sqlite
+          ? `^${String(index + 1).padStart(6, "0")}\\.do\\.\\w+\\.sql$`
+          : `^${String(index + 1).padStart(6, "0")}_\\w+\\.up\\.sql$`,
       ).test(file)
     )
       throw new Error("Migration versions must be continuous");
-    const down = file.replace(".up.sql", ".down.sql");
+    const down = sqlite
+      ? file.replace(".do.", ".undo.")
+      : file.replace(".up.sql", ".down.sql");
     if (!files.includes(down)) throw new Error(`Missing reversal: ${down}`);
     for (const name of [file, down]) {
       const bytes = readFileSync(new URL(name, directory));
@@ -36,14 +64,19 @@ function verifyMigrations(adapter: string): void {
     }
     return {
       idMonotonicInc: index + 1,
-      description: file.slice(7, -7),
+      description: sqlite ? file.slice(10, -4) : file.slice(7, -7),
       sql: readFileSync(new URL(file, directory), "utf8"),
     };
   });
   const reversals = up.map((file, index) => ({
     idMonotonicInc: index + 1,
     sql: readFileSync(
-      new URL(file.replace(".up.sql", ".down.sql"), directory),
+      new URL(
+        sqlite
+          ? file.replace(".do.", ".undo.")
+          : file.replace(".up.sql", ".down.sql"),
+        directory,
+      ),
       "utf8",
     ),
   }));
@@ -52,8 +85,10 @@ function verifyMigrations(adapter: string): void {
   const generatedFile = new URL("generated.ts", directory);
   if (process.argv.includes("--write")) {
     writeFileSync(checksumFile, JSON.stringify(pins, null, 2) + "\n");
-    writeFileSync(generatedFile, generated);
-    console.log(`${adapter}: generated migration bundle and SHA-256 pins.`);
+    if (adapter !== "postgresql") writeFileSync(generatedFile, generated);
+    console.log(
+      `${adapter}: wrote SHA-256 pins${adapter === "postgresql" ? "" : " and SQL bundle"}.`,
+    );
   } else {
     if (
       readFileSync(checksumFile, "utf8") !==
@@ -62,12 +97,15 @@ function verifyMigrations(adapter: string): void {
       throw new Error(
         `${adapter}: migration checksum mismatch; review SQL changes before regenerating`,
       );
-    if (readFileSync(generatedFile, "utf8") !== generated)
+    if (
+      adapter !== "postgresql" &&
+      readFileSync(generatedFile, "utf8") !== generated
+    )
       throw new Error(
         `Stale migration bundle: ${fileURLToPath(generatedFile)}`,
       );
     console.log(
-      `${adapter}: verified ${migrations.length} migration pair(s), checksums, and generated SQL bundle.`,
+      `${adapter}: verified ${migrations.length} migration(s), checksums${adapter === "postgresql" ? "" : ", and SQL bundle"}.`,
     );
   }
 }

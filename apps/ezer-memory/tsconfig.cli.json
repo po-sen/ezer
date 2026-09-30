@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2023"],
+    "types": ["node"]
+  },
+  "include": [
+    "src/entrypoints/migrate-*.ts",
+    "scripts/**/*.ts",
+    "tests/migration-cli.test.ts",
+    "tests/postgresql-migrations.test.ts"
+  ]
+}

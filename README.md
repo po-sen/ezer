@@ -79,7 +79,8 @@ pnpm run check:staged
 Use `pnpm run format:check <files>` to check explicit files without modifying
 them. Hook checks run locally without calling a model or a remote service.
 The service has strict TypeScript checks, architecture checks, and MCP integration
-tests that run in the local Workers runtime.
+tests that run in the local Workers runtime, Node SQLite CLI tests, and a disposable
+PostgreSQL integration suite.
 
 ### Continuous integration
 
@@ -93,12 +94,13 @@ This checks all indexed paths before formatting supported tracked files, even
 when no changes are staged. It reads working-tree contents and excludes untracked
 drafts. Stage intended new files before running it; use `check:staged` to validate
 a partially staged commit. Neither command reformats files. The full check also
-runs service type checks, tests, and a local Worker bundle build.
+runs service type checks, tests, and a local Worker bundle build. It requires the
+dedicated PostgreSQL test service described in the service README.
 
 GitHub Actions runs `Repository checks` on Node.js 24 for every PR targeting
 `main`, including drafts and documentation changes, and for pushes to `main`.
 It installs with `pnpm install --frozen-lockfile`, uses read-only repository permissions, and does
-not require project secrets. The `main` ruleset must require this check; workflow
+not require project secrets. It provisions an isolated PostgreSQL test service. The `main` ruleset must require this check; workflow
 files alone do not enforce merge protection.
 
 ### Working with agents

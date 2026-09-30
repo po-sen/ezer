@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { createCommitMemory } from "../src/memory/application/commit-memory";
-import { createInspectMemory } from "../src/memory/application/inspect-memory";
-import { createMemoryRpcHandler } from "../src/memory/delivery/rpc";
-import type { MemoryWrite } from "../src/memory/inboundport/commit-memory";
-import { PersistenceFault } from "../src/memory/outboundport/persistence-fault";
+import { createCommitMemory } from "../src/modules/memory/application/commit-memory.ts";
+import { createInspectMemory } from "../src/modules/memory/application/inspect-memory.ts";
+import { createMemoryRpcHandler } from "../src/modules/memory/delivery/rpc.ts";
+import type { MemoryWrite } from "../src/modules/memory/ports/inbound/commit-memory.ts";
+import { PersistenceFault } from "../src/modules/memory/ports/outbound/persistence-fault.ts";
 import type {
   MemoryStores,
   UnitOfWork,
-} from "../src/memory/outboundport/unit-of-work";
+} from "../src/modules/memory/ports/outbound/unit-of-work.ts";
 
 const now = "2026-09-30T00:00:00.000Z";
 function command(): MemoryWrite {

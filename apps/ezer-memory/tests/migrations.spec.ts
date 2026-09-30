@@ -1,12 +1,12 @@
 import { env } from "cloudflare:workers";
 import { runInDurableObject } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-import { migrateMemory } from "../src/memory/infrastructure/persistence/durable-object/migrate-memory";
-import { initializeIndividual } from "../src/memory/infrastructure/persistence/durable-object/initialize-individual";
+import { migrateMemory } from "../src/modules/memory/infrastructure/persistence/durable-object/migrate-memory.ts";
+import { initializeIndividual } from "../src/modules/memory/infrastructure/persistence/durable-object/initialize-individual.ts";
 import {
   migrations,
   reversals,
-} from "../src/memory/infrastructure/persistence/durable-object/migrations/generated";
+} from "../src/modules/memory/infrastructure/persistence/durable-object/migrations/generated.ts";
 
 function individual() {
   return env.EZER_MEMORY.get(env.EZER_MEMORY.newUniqueId());
