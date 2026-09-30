@@ -8,7 +8,7 @@ import ts from "typescript";
 const sourceRoot = fileURLToPath(new URL("../src/", import.meta.url));
 const internalLayers: Record<string, readonly string[]> = {
   domain: ["domain"],
-  inboundport: ["domain", "inboundport"],
+  inboundport: ["inboundport"],
   outboundport: ["domain", "outboundport"],
   application: ["domain", "inboundport", "outboundport", "application"],
   infrastructure: ["domain", "outboundport", "infrastructure"],
@@ -17,7 +17,15 @@ const internalLayers: Record<string, readonly string[]> = {
 
 function violation(file: string, dependency: string): string | undefined {
   const [context, layer] = file.split("/");
-  if (context === "bootstrap") return;
+  if (context === "bootstrap") {
+    if (
+      dependency === "cloudflare:workers" ||
+      dependency.startsWith("../memory/") ||
+      dependency === "../../package.json"
+    )
+      return;
+    return "unregistered bootstrap dependency";
+  }
   if (file === "index.ts") {
     return ["./bootstrap/worker", "./bootstrap/ezer-memory"].includes(
       dependency,
@@ -33,6 +41,11 @@ function violation(file: string, dependency: string): string | undefined {
     return "unregistered context or layer";
   }
   if (!dependency.startsWith(".")) {
+    if (
+      file === "memory/infrastructure/persistence/sqlite/migrate-memory.ts" &&
+      dependency === "durable-utils/sql-migrations"
+    )
+      return;
     if (
       layer === "delivery" &&
       ["@modelcontextprotocol/server", "zod"].includes(dependency)
@@ -114,6 +127,12 @@ test("production imports respect context ownership and inward dependencies", () 
 test("the boundary guard rejects SDK leakage, reversed dependencies, and foreign domains", () => {
   for (const [file, dependency] of [
     ["memory/domain/memory.ts", "@modelcontextprotocol/server"],
+    ["memory/inboundport/commit-memory.ts", "../domain/memory-revision"],
+    ["memory/outboundport/revision-store.ts", "../inboundport/inspect-memory"],
+    [
+      "memory/infrastructure/request-fingerprint.ts",
+      "durable-utils/sql-migrations",
+    ],
     ["memory/application/remember.ts", "../infrastructure/sqlite"],
     ["memory/delivery/mcp.ts", "../application/remember"],
     ["memory/inboundport/recall.ts", "cloudflare:workers"],
@@ -139,4 +158,129 @@ test("the boundary guard rejects SDK leakage, reversed dependencies, and foreign
     violation("memory/delivery/mcp.ts", "@modelcontextprotocol/server"),
     undefined,
   );
+});
+
+function responsibilityViolations(file: string, text: string): string[] {
+  const failures: string[] = [];
+  const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
+  const layer = file.split("/")[1];
+  const generatedSql =
+    file === "memory/infrastructure/persistence/migrations/generated.ts";
+  const nativeSql = file.startsWith("memory/infrastructure/persistence/");
+  const inner = [
+    "domain",
+    "application",
+    "inboundport",
+    "outboundport",
+  ].includes(layer ?? "");
+  const inspect = (node: ts.Node) => {
+    if (
+      inner &&
+      ts.isIdentifier(node) &&
+      [
+        "DurableObjectStorage",
+        "SqlStorage",
+        "SqlStorageCursor",
+        "DurableObjectState",
+        "Env",
+        "Request",
+        "Response",
+        "fetch",
+        "crypto",
+      ].includes(node.text)
+    )
+      failures.push("native capability in inner layer");
+    if (ts.isStringLiteralLike(node)) {
+      if (
+        !generatedSql &&
+        /\b(?:CREATE|ALTER|DROP)\s+(?:TABLE|INDEX|TRIGGER)\b/i.test(node.text)
+      )
+        failures.push("DDL outside versioned migrations");
+      if (
+        !nativeSql &&
+        /\b(?:SELECT\s+.+\s+FROM|INSERT\s+INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM)\b/i.test(
+          node.text,
+        )
+      )
+        failures.push("SQL outside owning persistence adapter");
+    }
+    if (
+      file.startsWith("bootstrap/") &&
+      (ts.isIfStatement(node) ||
+        ts.isSwitchStatement(node) ||
+        ts.isTryStatement(node))
+    )
+      failures.push("workflow branching in bootstrap");
+    if (
+      layer === "domain" &&
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      ["Date.now", "Math.random"].includes(node.expression.getText(source))
+    )
+      failures.push("ambient clock or randomness in domain");
+    ts.forEachChild(node, inspect);
+  };
+  inspect(source);
+  return failures;
+}
+
+test("source responsibilities exclude native handles, embedded DDL, and bootstrap policy", () => {
+  for (const path of sourceFiles(sourceRoot)) {
+    const file = relative(sourceRoot, path).split(sep).join("/");
+    assert.deepEqual(
+      responsibilityViolations(file, readFileSync(path, "utf8")),
+      [],
+      file,
+    );
+  }
+  for (const [file, text] of [
+    ["memory/domain/x.ts", "const now = Date.now();"],
+    ["memory/application/x.ts", "let storage: DurableObjectStorage;"],
+    [
+      "memory/infrastructure/persistence/sqlite/x.ts",
+      "const sql = `CREATE TABLE hidden (id INTEGER)`;",
+    ],
+    ["bootstrap/x.ts", "if (owner) save();"],
+    ["memory/application/x.ts", "const sql = 'SELECT * FROM revisions';"],
+  ])
+    assert(responsibilityViolations(file!, text!).length > 0, file);
+});
+
+test("authored TypeScript modules expose at most one public callable", () => {
+  const appRoot = resolve(sourceRoot, "..");
+  const files = [
+    sourceRoot,
+    resolve(appRoot, "tests"),
+    resolve(appRoot, "scripts"),
+  ].flatMap(sourceFiles);
+  const program = ts.createProgram(files, {
+    target: ts.ScriptTarget.ESNext,
+    module: ts.ModuleKind.ESNext,
+    moduleResolution: ts.ModuleResolutionKind.Bundler,
+    noEmit: true,
+    skipLibCheck: true,
+  });
+  const checker = program.getTypeChecker();
+  for (const path of files) {
+    const source = program.getSourceFile(path)!;
+    const module = checker.getSymbolAtLocation(source);
+    if (!module) continue;
+    const callables = checker.getExportsOfModule(module).filter((symbol) => {
+      const target =
+        symbol.flags & ts.SymbolFlags.Alias
+          ? checker.getAliasedSymbol(symbol)
+          : symbol;
+      const declaration = target.valueDeclaration;
+      return (
+        declaration &&
+        checker
+          .getTypeOfSymbolAtLocation(target, declaration)
+          .getCallSignatures().length > 0
+      );
+    });
+    assert(
+      callables.length <= 1,
+      `${relative(appRoot, path)} exports ${callables.map((symbol) => symbol.name).join(", ")}`,
+    );
+  }
 });

@@ -1,8 +1,9 @@
 import { env, exports } from "cloudflare:workers";
 import { evictDurableObject, runInDurableObject } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-import type { MemoryWrite } from "../src/memory/domain/memory";
-import { migrateMemoryStore } from "../src/memory/infrastructure/migrate-memory-store";
+import type { MemoryWrite } from "../src/memory/inboundport/commit-memory";
+import { migrateMemory } from "../src/memory/infrastructure/persistence/sqlite/migrate-memory";
+import { initializeIndividual } from "../src/memory/infrastructure/persistence/sqlite/initialize-individual";
 
 function individual() {
   return env.EZER_MEMORY.get(env.EZER_MEMORY.newUniqueId());
@@ -166,10 +167,10 @@ describe("persistent memory through the internal Durable Object binding", () => 
     expect(await alice.commit(reordered)).toEqual(receipts[0]);
     await runInDurableObject(alice, (_instance, state) => {
       expect(
-        state.storage.sql.exec("SELECT * FROM memory_revisions").toArray(),
+        state.storage.sql.exec("SELECT * FROM revisions").toArray(),
       ).toHaveLength(1);
       expect(
-        state.storage.sql.exec("SELECT * FROM memory_operations").toArray(),
+        state.storage.sql.exec("SELECT * FROM operations").toArray(),
       ).toHaveLength(1);
     });
   });
@@ -281,7 +282,7 @@ describe("persistent memory through the internal Durable Object binding", () => 
     await alice.inspect({ memoryId: "missing" });
     await runInDurableObject(alice, (_instance, state) => {
       state.storage.sql
-        .exec(`CREATE TRIGGER fail_operation BEFORE INSERT ON memory_operations
+        .exec(`CREATE TRIGGER fail_operation BEFORE INSERT ON operations
         BEGIN SELECT RAISE(ABORT, 'synthetic receipt failure'); END;`);
     });
     expect(await alice.commit(remember())).toEqual({
@@ -294,12 +295,10 @@ describe("persistent memory through the internal Durable Object binding", () => 
     });
     await runInDurableObject(alice, (_instance, state) => {
       expect(
-        state.storage.sql
-          .exec("SELECT change_sequence FROM memory_state")
-          .one(),
+        state.storage.sql.exec("SELECT change_sequence FROM state").one(),
       ).toEqual({ change_sequence: 0 });
       expect(
-        state.storage.sql.exec("SELECT * FROM memory_operations").toArray(),
+        state.storage.sql.exec("SELECT * FROM operations").toArray(),
       ).toEqual([]);
       state.storage.sql.exec("DROP TRIGGER fail_operation");
     });
@@ -311,7 +310,7 @@ describe("persistent memory through the internal Durable Object binding", () => 
 
   it("preserves text exactly and binds values instead of interpolating SQL", async () => {
     const alice = individual();
-    const text = "  '); DROP TABLE memory_revisions; --\n\u2603 \u{1f642}  ";
+    const text = "  '); DROP TABLE revisions; --\n\u2603 \u{1f642}  ";
     const request = {
       ...remember(),
       body: text,
@@ -363,10 +362,10 @@ describe("persistent memory through the internal Durable Object binding", () => 
     }
     await runInDurableObject(alice, (_instance, state) => {
       expect(
-        state.storage.sql.exec("SELECT * FROM memory_revisions").toArray(),
+        state.storage.sql.exec("SELECT * FROM revisions").toArray(),
       ).toEqual([]);
       expect(
-        state.storage.sql.exec("SELECT * FROM memory_operations").toArray(),
+        state.storage.sql.exec("SELECT * FROM operations").toArray(),
       ).toEqual([]);
     });
     expect(await alice.commit(base)).toMatchObject({
@@ -428,7 +427,7 @@ describe("persistent memory through the internal Durable Object binding", () => 
     await alice.commit(remember());
     await runInDurableObject(alice, (_instance, state) => {
       state.storage.sql.exec(
-        "ALTER TABLE memory_revisions RENAME TO unavailable_revisions",
+        "ALTER TABLE revisions RENAME TO unavailable_revisions",
       );
     });
     expect(await alice.inspect({ memoryId: "preference" })).toEqual({
@@ -443,16 +442,14 @@ describe("persistent memory through the internal Durable Object binding", () => 
     const before = await alice.inspect({ memoryId: "preference" });
     await runInDurableObject(alice, (_instance, state) => {
       expect(() =>
-        migrateMemoryStore(state.storage, "another-individual"),
+        initializeIndividual(state.storage, "another-individual"),
       ).toThrow("identity mismatch");
-      state.storage.sql.exec("UPDATE memory_schema SET version = 2");
-      expect(() =>
-        migrateMemoryStore(state.storage, state.id.toString()),
-      ).toThrow("Unsupported memory schema");
-      expect(
-        state.storage.sql.exec("SELECT version FROM memory_schema").one(),
-      ).toEqual({ version: 2 });
-      state.storage.sql.exec("UPDATE memory_schema SET version = 1");
+      state.storage.kv.put("memory:schema-version", 2);
+      expect(() => migrateMemory(state.storage)).toThrow(
+        "Unsupported memory schema",
+      );
+      expect(state.storage.kv.get("memory:schema-version")).toEqual(2);
+      state.storage.kv.put("memory:schema-version", 1);
     });
     await evictDurableObject(alice);
     expect(await alice.inspect({ memoryId: "preference" })).toEqual(before);

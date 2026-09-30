@@ -1,70 +1,118 @@
-import type {
-  MemoryReceipt,
-  MemoryResult,
-  MemoryWrite,
-} from "../domain/memory";
-import { parseMemoryWrite } from "../domain/parse-memory-write";
-import { planMemoryRevision } from "../domain/plan-memory-revision";
-import type { CommitMemory } from "../inboundport/commit-memory";
-import type { MemoryStore } from "../outboundport/memory-store";
+import { MemoryFault } from "../domain/memory-fault";
+import { transitionMemory } from "../domain/transition-memory";
+import { validateMemoryId } from "../domain/validate-memory-id";
+import type { CommitMemory, MemoryWrite } from "../inboundport/commit-memory";
+import { PersistenceFault } from "../outboundport/persistence-fault";
 import type { RequestFingerprint } from "../outboundport/request-fingerprint";
+import type { UnitOfWork } from "../outboundport/unit-of-work";
 
-function canonicalRequest(command: MemoryWrite): string {
-  return JSON.stringify([
-    1,
-    command.kind,
-    command.operationId,
-    command.memoryId,
-    command.body,
-    command.source.reference,
-    command.source.excerpt,
-    command.kind === "revise" ? command.expectedRevision : null,
-    command.kind === "revise" ? command.reason : null,
-  ]);
+function snapshot(command: MemoryWrite): MemoryWrite {
+  const content = {
+    operationId: command.operationId,
+    memoryId: command.memoryId,
+    body: command.body,
+    source: {
+      reference: command.source.reference,
+      excerpt: command.source.excerpt,
+    },
+  };
+  return command.kind === "remember"
+    ? { ...content, kind: "remember" }
+    : {
+        ...content,
+        kind: "revise",
+        expectedRevision: command.expectedRevision,
+        reason: command.reason,
+      };
 }
 
 export function createCommitMemory(
-  store: MemoryStore,
+  unitOfWork: UnitOfWork,
   fingerprints: RequestFingerprint,
   now: () => string,
 ): CommitMemory {
   return {
-    async execute(input): Promise<MemoryResult<MemoryReceipt>> {
-      const command = parseMemoryWrite(input);
-      if (!command) return { ok: false, code: "INVALID_INPUT" };
-      const fingerprint = await fingerprints.digest(canonicalRequest(command));
-      return store.transaction((transaction) => {
-        // Retry resolution precedes version checks: even an old successful write
-        // returns its original receipt after later revisions have committed.
-        const previous = transaction.findOperation(command.operationId);
-        if (previous) {
-          return previous.fingerprint === fingerprint
-            ? { ok: true, value: previous.receipt }
-            : { ok: false, code: "OPERATION_CONFLICT" };
-        }
-        const planned = planMemoryRevision(
-          command,
-          transaction.findRevision(command.memoryId),
-          transaction.state(),
-          now(),
+    async execute(input) {
+      const command = snapshot(input);
+      try {
+        validateMemoryId(command.operationId);
+        const fingerprint = await fingerprints.digest(
+          JSON.stringify([
+            1,
+            command.kind,
+            command.operationId,
+            command.memoryId,
+            command.body,
+            command.source.reference,
+            command.source.excerpt,
+            command.kind === "revise" ? command.expectedRevision : null,
+            command.kind === "revise" ? command.reason : null,
+          ]),
         );
-        if (!planned.ok) return planned;
-        const { individualId, memoryId, revision, changeSequence, recordedAt } =
-          planned.value;
-        const receipt = {
-          individualId,
-          memoryId,
-          revision,
-          changeSequence,
-          recordedAt,
-        };
-        transaction.appendRevision(planned.value);
-        transaction.recordOperation(command.operationId, {
-          fingerprint,
-          receipt,
+        return unitOfWork.within((stores) => {
+          const state = stores.state.read();
+          const previous = stores.operations.find(command.operationId);
+          if (previous) {
+            if (previous.fingerprint !== fingerprint)
+              return { ok: false, code: "OPERATION_CONFLICT" } as const;
+            return {
+              ok: true,
+              value: {
+                individualId: state.individualId,
+                memoryId: previous.memoryId,
+                revision: previous.revision,
+                recordedAt: previous.recordedAt,
+                changeSequence: previous.changeSequence,
+              },
+            } as const;
+          }
+          const content = {
+            memoryId: command.memoryId,
+            body: command.body,
+            source: command.source,
+          };
+          const intent =
+            command.kind === "remember"
+              ? { kind: "remember" as const, content }
+              : {
+                  kind: "revise" as const,
+                  content,
+                  expectedRevision: command.expectedRevision,
+                  reason: command.reason,
+                };
+          const revision = transitionMemory(
+            intent,
+            stores.revisions.find(command.memoryId),
+            state.changeSequence,
+            now(),
+          );
+          stores.revisions.append(revision);
+          stores.state.advance(state.changeSequence, revision.changeSequence);
+          stores.operations.record(command.operationId, {
+            fingerprint,
+            memoryId: revision.memoryId,
+            revision: revision.revision,
+            recordedAt: revision.recordedAt,
+            changeSequence: revision.changeSequence,
+          });
+          return {
+            ok: true,
+            value: {
+              individualId: state.individualId,
+              memoryId: revision.memoryId,
+              revision: revision.revision,
+              recordedAt: revision.recordedAt,
+              changeSequence: revision.changeSequence,
+            },
+          } as const;
         });
-        return { ok: true, value: receipt };
-      });
+      } catch (error) {
+        if (error instanceof MemoryFault)
+          return { ok: false, code: error.code };
+        if (error instanceof PersistenceFault)
+          return { ok: false, code: "UNAVAILABLE" };
+        throw error;
+      }
     },
   };
 }

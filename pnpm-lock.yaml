@@ -222,6 +222,9 @@ importers:
       "@modelcontextprotocol/server":
         specifier: 2.1.0
         version: 2.1.0
+      durable-utils:
+        specifier: 0.3.7
+        version: 0.3.7
       zod:
         specifier: 4.6.5
         version: 4.6.5
@@ -1172,6 +1175,12 @@ packages:
         integrity: sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ==,
       }
     engines: { node: ">=8" }
+
+  durable-utils@0.3.7:
+    resolution:
+      {
+        integrity: sha512-7WW01kg50gF2rKQtU5s+WkQnlWL6vz1o1uBOPVNVfV+U51Kmi56zwgAxUTy+9PvNq24WS3N5IT9AYKvn6nJe5A==,
+      }
 
   error-stack-parser-es@1.0.5:
     resolution:
@@ -2186,6 +2195,8 @@ snapshots:
       which: 2.0.2
 
   detect-libc@2.1.2: {}
+
+  durable-utils@0.3.7: {}
 
   error-stack-parser-es@1.0.5: {}
 

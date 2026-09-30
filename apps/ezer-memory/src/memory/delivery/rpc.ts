@@ -1,25 +1,53 @@
+import { z } from "zod";
 import type { CommitMemory } from "../inboundport/commit-memory";
 import type { InspectMemory } from "../inboundport/inspect-memory";
-
+const content = {
+  operationId: z.string(),
+  memoryId: z.string(),
+  body: z.string(),
+  source: z.strictObject({ reference: z.string(), excerpt: z.string() }),
+};
+const write = z.discriminatedUnion("kind", [
+  z.strictObject({ ...content, kind: z.literal("remember") }),
+  z.strictObject({
+    ...content,
+    kind: z.literal("revise"),
+    expectedRevision: z.number(),
+    reason: z.string(),
+  }),
+]);
+const read = z.strictObject({
+  memoryId: z.string(),
+  revision: z.number().optional(),
+});
 export function createMemoryRpcHandler(
   commit: CommitMemory,
   inspect: InspectMemory,
 ) {
   return {
-    async commit(command: Parameters<CommitMemory["execute"]>[0]) {
+    async commit(input: unknown) {
+      const parsed = write.safeParse(input);
+      if (!parsed.success) return { ok: false, code: "INVALID_INPUT" } as const;
       try {
-        return await commit.execute(command);
+        return await commit.execute(parsed.data);
       } catch {
-        // Retry with the original operation ID: an unavailable response is
-        // not evidence that a write did or did not commit.
-        return { ok: false, code: "UNAVAILABLE" } as const;
+        return { ok: false, code: "INTERNAL_ERROR" } as const;
       }
     },
-    inspect(lookup: Parameters<InspectMemory["execute"]>[0]) {
+    inspect(input: unknown) {
+      const parsed = read.safeParse(input);
+      if (!parsed.success) return { ok: false, code: "INVALID_INPUT" } as const;
       try {
-        return inspect.execute(lookup);
+        return inspect.execute(
+          parsed.data.revision === undefined
+            ? { memoryId: parsed.data.memoryId }
+            : {
+                memoryId: parsed.data.memoryId,
+                revision: parsed.data.revision,
+              },
+        );
       } catch {
-        return { ok: false, code: "UNAVAILABLE" } as const;
+        return { ok: false, code: "INTERNAL_ERROR" } as const;
       }
     },
   };

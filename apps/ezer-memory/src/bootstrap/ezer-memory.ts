@@ -2,35 +2,33 @@ import { DurableObject } from "cloudflare:workers";
 import { createCommitMemory } from "../memory/application/commit-memory";
 import { createInspectMemory } from "../memory/application/inspect-memory";
 import { createMemoryRpcHandler } from "../memory/delivery/rpc";
-import type { MemoryLookup, MemoryWrite } from "../memory/domain/memory";
-import { migrateMemoryStore } from "../memory/infrastructure/migrate-memory-store";
 import { createRequestFingerprint } from "../memory/infrastructure/request-fingerprint";
-import { createSqliteMemoryStore } from "../memory/infrastructure/sqlite-memory-store";
+import { initializeIndividual } from "../memory/infrastructure/persistence/sqlite/initialize-individual";
+import { migrateMemory } from "../memory/infrastructure/persistence/sqlite/migrate-memory";
+import { createSqliteUnitOfWork } from "../memory/infrastructure/persistence/sqlite/unit-of-work";
 
-// Only callers with a Worker binding can use this internal RPC surface.
-// HTTP/MCP must authorize a fixed individual before selecting its object.
+// Cloudflare requires the exported class to own object lifecycle and RPC methods.
+// This entry point only initializes adapters, composes use cases, and delegates.
 export class EzerMemory extends DurableObject<Env> {
   #rpc: ReturnType<typeof createMemoryRpcHandler>;
-
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     ctx.blockConcurrencyWhile(async () => {
-      migrateMemoryStore(ctx.storage, ctx.id.toString());
+      migrateMemory(ctx.storage);
+      initializeIndividual(ctx.storage, ctx.id.toString());
     });
-    const store = createSqliteMemoryStore(ctx.storage);
+    const unitOfWork = createSqliteUnitOfWork(ctx.storage);
     this.#rpc = createMemoryRpcHandler(
-      createCommitMemory(store, createRequestFingerprint(), () =>
+      createCommitMemory(unitOfWork, createRequestFingerprint(), () =>
         new Date().toISOString(),
       ),
-      createInspectMemory(store),
+      createInspectMemory(unitOfWork),
     );
   }
-
-  commit(command: MemoryWrite) {
-    return this.#rpc.commit(command);
+  commit(input: unknown) {
+    return this.#rpc.commit(input);
   }
-
-  inspect(lookup: MemoryLookup) {
-    return this.#rpc.inspect(lookup);
+  inspect(input: unknown) {
+    return this.#rpc.inspect(input);
   }
 }

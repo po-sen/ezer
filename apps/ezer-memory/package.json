@@ -7,16 +7,19 @@
     "node": ">=24"
   },
   "scripts": {
-    "dev": "pnpm run types && wrangler dev --local --ip 127.0.0.1",
+    "dev": "pnpm run migrations:check && pnpm run types && wrangler dev --local --ip 127.0.0.1",
     "types": "wrangler types",
     "types:check": "wrangler types --check",
     "typecheck": "pnpm run types && tsc --noEmit && tsc --noEmit -p tests/tsconfig.json",
     "test": "node --test tests/architecture.test.ts && vitest run",
-    "build": "wrangler deploy --dry-run --outdir dist",
-    "check": "pnpm run types:check && pnpm run typecheck && pnpm test && pnpm run build"
+    "build": "pnpm run migrations:check && wrangler deploy --dry-run --outdir dist",
+    "check": "pnpm run migrations:check && pnpm run types:check && pnpm run typecheck && pnpm test && pnpm run build",
+    "migrations:generate": "node scripts/generate-migrations.ts --write",
+    "migrations:check": "node scripts/generate-migrations.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.1.0",
+    "durable-utils": "0.3.7",
     "zod": "4.6.5"
   },
   "devDependencies": {

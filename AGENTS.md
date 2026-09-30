@@ -45,7 +45,8 @@ The full check does not include untracked drafts. It checks tracked working-tree
 formatting, then runs service type checks, architecture and Worker tests, and a
 local bundle build. Use the staged check to validate partially staged formatting.
 Service commands are available with `pnpm --filter @ezer/memory run <command>`:
-`types`, `types:check`, `typecheck`, `test`, `build`, and `dev`. Persistence tests
+`types`, `types:check`, `typecheck`, `test`, `build`, `dev`,
+`migrations:generate`, and `migrations:check`. Persistence tests
 use synthetic data through the internal `EZER_MEMORY` binding. Keep that binding
 off public HTTP/MCP routes until authentication and individual authorization exist.
 Worker declarations are generated with `wrangler types`; commit the output after
@@ -67,7 +68,14 @@ dependencies. Do not split DDD layers into workspace packages by default.
 
 Organize service code by bounded context. Keep domain models pure and place use
 cases behind inbound ports; external effects belong behind outbound ports.
-Delivery uses inbound ports, and bootstrap only composes implementations. Add
+Delivery uses inbound ports, and bootstrap only composes implementations.
+Commands, queries, and detached views belong to inbound ports; domain types must
+not serve as wire contracts. A focused Unit of Work owns transaction demarcation;
+Stores do not begin or commit transactions. Keep versioned SQL pairs under the
+owning context's `infrastructure/persistence/migrations/`; never embed handwritten
+DDL in TypeScript. Review SQL and checksum changes before regenerating the bundle.
+Released migration files and pins are immutable. See the memory context README
+for explicit Cloudflare lifecycle and forward-only recovery adaptations. Add
 layers when they have real responsibilities, not as empty scaffolding. Extend
 architecture checks when introducing a new context or allowed dependency.
 
