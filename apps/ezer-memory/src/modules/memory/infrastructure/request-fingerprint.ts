@@ -1,4 +1,4 @@
-import type { RequestFingerprint } from "../ports/outbound/request-fingerprint.ts";
+import type { RequestFingerprint } from "../ports/outbound/index.ts";
 
 export function createRequestFingerprint(): RequestFingerprint {
   return {

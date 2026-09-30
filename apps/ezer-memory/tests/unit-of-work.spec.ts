@@ -1,9 +1,9 @@
 import { env } from "cloudflare:workers";
 import { runInDurableObject } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-import { createDurableObjectUnitOfWork } from "../src/modules/memory/infrastructure/persistence/durable-object/unit-of-work.ts";
-import { PersistenceFault } from "../src/modules/memory/ports/outbound/persistence-fault.ts";
-import type { MemoryStores } from "../src/modules/memory/ports/outbound/memory-stores.ts";
+import { createDurableObjectUnitOfWork } from "../src/modules/memory/infrastructure/persistence/durable-object/index.ts";
+import { PersistenceFault } from "../src/modules/memory/ports/outbound/index.ts";
+import type { MemoryStores } from "../src/modules/memory/ports/outbound/index.ts";
 
 describe("Durable Object Unit of Work boundaries", () => {
   it("revokes store capabilities after success or rollback, including a later transaction", async () => {

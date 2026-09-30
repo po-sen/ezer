@@ -7,7 +7,7 @@ import Postgrator from "postgrator";
 
 export function createMigrationRunner(
   database: DatabaseSync,
-  directory = fileURLToPath(new URL("./migrations/", import.meta.url)),
+  directory = fileURLToPath(new URL("../migrations/", import.meta.url)),
 ): Postgrator {
   const pins: Record<string, string> = JSON.parse(
     readFileSync(join(directory, "checksums.json"), "utf8"),

@@ -1,11 +1,16 @@
-import { MemoryFault } from "../domain/memory-fault.ts";
-import { transitionMemory } from "../domain/transition-memory.ts";
-import { validateMemoryId } from "../domain/validate-memory-id.ts";
-import type { CommitMemory } from "../ports/inbound/commit-memory.ts";
-import type { MemoryWrite } from "../ports/inbound/memory-write.ts";
-import { PersistenceFault } from "../ports/outbound/persistence-fault.ts";
-import type { RequestFingerprint } from "../ports/outbound/request-fingerprint.ts";
-import type { UnitOfWork } from "../ports/outbound/unit-of-work.ts";
+import {
+  MemoryFault,
+  transitionMemory,
+  validateMemoryId,
+} from "../domain/index.ts";
+
+import type { CommitMemory, MemoryWrite } from "../ports/inbound/index.ts";
+
+import { PersistenceFault } from "../ports/outbound/index.ts";
+import type {
+  RequestFingerprint,
+  UnitOfWork,
+} from "../ports/outbound/index.ts";
 
 function snapshot(command: MemoryWrite): MemoryWrite {
   const content = {

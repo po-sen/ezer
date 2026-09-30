@@ -1,4 +1,4 @@
-import { PersistenceFault } from "../../../ports/outbound/persistence-fault.ts";
+import { PersistenceFault } from "../../../ports/outbound/index.ts";
 import type { SqlSession } from "./session.ts";
 import type { SqlValue } from "./sql-value.ts";
 

@@ -14,9 +14,11 @@ import { join } from "node:path";
 import { test, type TestContext } from "node:test";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
-import { inspectMigrations } from "../src/modules/memory/infrastructure/persistence/postgresql/inspect-migrations.ts";
-import { migrateMemory } from "../src/modules/memory/infrastructure/persistence/postgresql/migrate-memory.ts";
-import { readMigrationPlan } from "../src/modules/memory/infrastructure/persistence/postgresql/read-migration-plan.ts";
+import {
+  inspectMigrations,
+  migrateMemory,
+  readMigrationPlan,
+} from "../src/modules/memory/infrastructure/persistence/postgresql/index.ts";
 
 const appRoot = fileURLToPath(new URL("../", import.meta.url));
 // Dedicated disposable local/CI service; never use a developer's PG environment.
@@ -79,7 +81,7 @@ test("PostgreSQL CLI upgrades only memory and status never creates a schema", as
     spawnSync(
       process.execPath,
       [
-        join(appRoot, "src/entrypoints/migrate-postgresql.ts"),
+        join(appRoot, "src/entrypoints/migrate-postgresql/index.ts"),
         action,
         "--database",
         database,

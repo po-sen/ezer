@@ -15,9 +15,11 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { test, type TestContext } from "node:test";
 import { fileURLToPath } from "node:url";
-import { createMigrationRunner } from "../src/modules/memory/infrastructure/persistence/sqlite/create-migration-runner.ts";
-import { inspectMigrations } from "../src/modules/memory/infrastructure/persistence/sqlite/inspect-migrations.ts";
-import { migrateMemory } from "../src/modules/memory/infrastructure/persistence/sqlite/migrate-memory.ts";
+import {
+  createMigrationRunner,
+  inspectMigrations,
+  migrateMemory,
+} from "../src/modules/memory/infrastructure/persistence/sqlite/cli/index.ts";
 
 const appRoot = fileURLToPath(new URL("../", import.meta.url));
 const source = join(
@@ -54,7 +56,7 @@ function pin(directory: string) {
 function cli(adapter: string, args: string[]) {
   return spawnSync(
     process.execPath,
-    [join(appRoot, `src/entrypoints/migrate-${adapter}.ts`), ...args],
+    [join(appRoot, `src/entrypoints/migrate-${adapter}/index.ts`), ...args],
     {
       encoding: "utf8",
       // Tests never inherit database credentials or runtime flags from the host.

@@ -1,4 +1,4 @@
-import type { RevisionStore } from "../../../ports/outbound/revision-store.ts";
+import type { RevisionStore } from "../../../ports/outbound/index.ts";
 import type { SqlSession } from "./session.ts";
 import type { SqlValue } from "./sql-value.ts";
 interface RevisionRow extends Record<string, SqlValue> {

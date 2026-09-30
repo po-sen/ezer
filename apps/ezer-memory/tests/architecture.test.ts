@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { readFileSync, readdirSync } from "node:fs";
-import { dirname, relative, resolve, sep } from "node:path";
+import { basename, dirname, relative, resolve, sep } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 
 const sourceRoot = fileURLToPath(new URL("../src/", import.meta.url));
+const repositoryRoot = resolve(sourceRoot, "../../..");
 const internalLayers: Record<string, readonly string[]> = {
   domain: ["domain"],
   "ports/inbound": ["ports/inbound"],
@@ -27,24 +29,27 @@ function violation(file: string, dependency: string): string | undefined {
         .join("/")
         .replace(/\.ts$/, "")
     : dependency;
-  if (file.startsWith("entrypoints/")) {
-    const allowed: Record<string, string[]> = {
-      "entrypoints/worker.ts": [
-        "bootstrap/create-worker",
-        "cloudflare:workers",
-      ],
-      "entrypoints/migrate-sqlite.ts": [
-        "node:util",
-        "bootstrap/create-sqlite-migrator",
-      ],
-      "entrypoints/migrate-postgresql.ts": [
-        "node:util",
-        "bootstrap/create-postgresql-migrator",
-      ],
-    };
-    return allowed[file]?.includes(target)
+  const facades: Record<string, readonly string[]> = {
+    "index.ts": ["entrypoints/index"],
+    "modules/index.ts": ["modules/memory/index"],
+    "modules/memory/index.ts": ["modules/memory/ports/index"],
+    "modules/memory/ports/index.ts": ["modules/memory/ports/inbound/index"],
+  };
+  if (facades[file])
+    return facades[file]!.some(
+      (allowed) =>
+        target === allowed || target.startsWith(`${dirname(allowed)}/`),
+    )
       ? undefined
-      : "entrypoint must delegate to its bootstrap";
+      : "context facade must expose its declared public API";
+  if (file.startsWith("entrypoints/")) {
+    const bootstrap = file
+      .replace(/^entrypoints\//, "bootstrap/")
+      .replace(/\.ts$/, "");
+    return target === bootstrap ||
+      ["cloudflare:workers", "node:util"].includes(target)
+      ? undefined
+      : "entrypoint must delegate to its corresponding bootstrap";
   }
   if (file.startsWith("bootstrap/")) {
     return dependency.startsWith(".") &&
@@ -60,12 +65,9 @@ function violation(file: string, dependency: string): string | undefined {
     return "unregistered context or layer";
   if (!dependency.startsWith(".")) {
     const persistence = "modules/memory/infrastructure/persistence/";
-    const externals: Record<string, string[]> = {
-      [`${persistence}durable-object/migrate-memory.ts`]: [
-        "durable-utils/sql-migrations",
-      ],
-      [`${persistence}sqlite/open-database.ts`]: ["node:sqlite"],
-      [`${persistence}sqlite/create-migration-runner.ts`]: [
+    const externals: Record<string, readonly string[]> = {
+      [`${persistence}durable-object/`]: ["durable-utils/sql-migrations"],
+      [`${persistence}sqlite/cli/`]: [
         "node:crypto",
         "node:fs",
         "node:path",
@@ -73,27 +75,20 @@ function violation(file: string, dependency: string): string | undefined {
         "node:url",
         "postgrator",
       ],
-      [`${persistence}sqlite/inspect-migrations.ts`]: [
-        "node:sqlite",
-        "postgrator",
-      ],
-      [`${persistence}sqlite/migrate-memory.ts`]: ["node:sqlite", "postgrator"],
-      [`${persistence}postgresql/open-database.ts`]: ["pg"],
-      [`${persistence}postgresql/read-migration-plan.ts`]: [
+      [`${persistence}postgresql/`]: [
         "node:crypto",
         "node:fs",
         "node:path",
         "node:url",
-      ],
-      [`${persistence}postgresql/inspect-migrations.ts`]: ["pg"],
-      [`${persistence}postgresql/migrate-memory.ts`]: [
         "pg",
-        "node:path",
         "node-pg-migrate",
       ],
     };
     if (
-      externals[file]?.includes(dependency) ||
+      Object.entries(externals).some(
+        ([directory, dependencies]) =>
+          file.startsWith(directory) && dependencies.includes(dependency),
+      ) ||
       (layer === "delivery" &&
         ["@modelcontextprotocol/server", "zod"].includes(dependency))
     )
@@ -128,6 +123,24 @@ function sourceFiles(directory: string): string[] {
   });
 }
 
+function pathViolation(file: string, dependency: string): string | undefined {
+  if (!dependency.startsWith(".") || dependency.endsWith(".json")) return;
+  const target = resolve(dirname(file), dependency);
+  if (!dependency.endsWith(".ts"))
+    return "source imports must use an explicit .ts extension";
+  if (
+    dirname(target) !== resolve(dirname(file)) &&
+    basename(target) !== "index.ts"
+  )
+    return "cross-directory imports must use index.ts";
+  if (
+    dirname(target) === resolve(dirname(file)) &&
+    basename(target) === "index.ts" &&
+    basename(file) !== "index.ts"
+  )
+    return "implementation files must not import their own barrel";
+}
+
 function importViolations(file: string, text: string): string[] {
   const failures: string[] = [];
   const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
@@ -154,7 +167,8 @@ function importViolations(file: string, text: string): string[] {
       failures.push(`${file}: runtime imports are not allowed in this service`);
     }
     if (dependency !== undefined) {
-      const reason = violation(file, dependency);
+      const reason =
+        pathViolation(file, dependency) ?? violation(file, dependency);
       if (reason) failures.push(`${file} -> ${dependency}: ${reason}`);
     }
     ts.forEachChild(node, inspect);
@@ -204,7 +218,7 @@ test("the boundary guard rejects SDK leakage, reversed dependencies, and foreign
       "../application/commit-memory",
     ],
     [
-      "entrypoints/worker.ts",
+      "entrypoints/index.ts",
       "../modules/memory/infrastructure/sqlite-memory-store",
     ],
     [
@@ -224,7 +238,7 @@ test("the boundary guard rejects SDK leakage, reversed dependencies, and foreign
       "../../../domain/memory-revision",
     ],
     [
-      "entrypoints/migrate-sqlite.ts",
+      "entrypoints/migrate-sqlite/index.ts",
       "../modules/memory/infrastructure/persistence/sqlite/migrate-memory.ts",
     ],
     [
@@ -232,11 +246,11 @@ test("the boundary guard rejects SDK leakage, reversed dependencies, and foreign
       "../sqlite/migrations/migrations.generated.ts",
     ],
     [
-      "modules/memory/infrastructure/persistence/sqlite/migrate-memory.ts",
+      "modules/memory/infrastructure/persistence/sqlite/cli/migrate-memory.ts",
       "../postgresql/read-migration-plan.ts",
     ],
     [
-      "modules/memory/infrastructure/persistence/sqlite/migrate-memory.ts",
+      "modules/memory/infrastructure/persistence/sqlite/cli/migrate-memory.ts",
       "durable-utils/sql-migrations",
     ],
   ] as const) {
@@ -496,6 +510,8 @@ function pairingViolations(files: ReadonlyMap<string, string>): string[] {
     if (dependencies.size !== 1)
       failures.push(`${entrypoint} must import exactly one bootstrap module`);
     for (const dependency of dependencies) {
+      if (dependency !== entrypoint.replace(/^entrypoints\//, "bootstrap/"))
+        failures.push(`${entrypoint} must use its matching bootstrap path`);
       if (!bootstraps.includes(dependency))
         failures.push(
           `${entrypoint} imports a missing bootstrap: ${dependency}`,
@@ -546,4 +562,264 @@ test("the pairing guard rejects shared, missing, orphaned, and multiple bootstra
   const orphan = new Map(valid);
   orphan.set("bootstrap/orphan.ts", "export const orphan = {};");
   assert(pairingViolations(orphan).length > 0);
+});
+
+function importedOrigins(
+  symbol: ts.Symbol,
+  checker: ts.TypeChecker,
+  seen = new Set<ts.Symbol>(),
+): string[] {
+  if (seen.has(symbol)) return [];
+  seen.add(symbol);
+  if (symbol.flags & ts.SymbolFlags.Alias)
+    return importedOrigins(checker.getAliasedSymbol(symbol), checker, seen);
+  if (symbol.flags & ts.SymbolFlags.Module)
+    return checker
+      .getExportsOfModule(symbol)
+      .flatMap((member) => importedOrigins(member, checker, seen));
+  return (symbol.declarations ?? []).map(
+    (declaration) => declaration.getSourceFile().fileName,
+  );
+}
+
+function provenanceViolations(program: ts.Program, path: string): string[] {
+  const source = program.getSourceFile(path)!;
+  const checker = program.getTypeChecker();
+  const file = relative(sourceRoot, path).split(sep).join("/");
+  const failures: string[] = [];
+  const inspect = (node: ts.Node) => {
+    const references: ts.Node[] = [];
+    if (ts.isImportDeclaration(node)) {
+      if (node.importClause?.name) references.push(node.importClause.name);
+      const bindings = node.importClause?.namedBindings;
+      if (bindings)
+        references.push(
+          ...(ts.isNamedImports(bindings)
+            ? bindings.elements.map((element) => element.name)
+            : [bindings.name]),
+        );
+      if (!node.importClause) references.push(node.moduleSpecifier);
+    } else if (ts.isExportDeclaration(node)) {
+      if (node.exportClause)
+        references.push(
+          ...(ts.isNamedExports(node.exportClause)
+            ? node.exportClause.elements.map((element) => element.name)
+            : [node.exportClause.name]),
+        );
+      else if (node.moduleSpecifier) references.push(node.moduleSpecifier);
+    } else if (
+      ts.isImportTypeNode(node) &&
+      ts.isLiteralTypeNode(node.argument)
+    ) {
+      references.push(node.qualifier ?? node.argument.literal);
+    }
+    for (const reference of references) {
+      const symbol = checker.getSymbolAtLocation(reference);
+      if (!symbol) continue; // Type checking reports unresolved imports.
+      for (const origin of new Set(importedOrigins(symbol, checker))) {
+        if (!origin.startsWith(sourceRoot)) continue;
+        let dependency = relative(dirname(path), origin).split(sep).join("/");
+        if (!dependency.startsWith(".")) dependency = `./${dependency}`;
+        const reason = violation(file, dependency);
+        if (reason)
+          failures.push(
+            `${file} resolves to ${relative(sourceRoot, origin)}: ${reason}`,
+          );
+      }
+    }
+    ts.forEachChild(node, inspect);
+  };
+  inspect(source);
+  return failures;
+}
+
+test("source folders expose explicit indexes without bypassing dependency ownership", () => {
+  const paths = sourceFiles(sourceRoot);
+  const directories = new Set<string>();
+  for (const path of paths) {
+    // Native PostgreSQL migrations are discovered as files, not imported as a module.
+    if (
+      path.startsWith(
+        resolve(
+          sourceRoot,
+          "modules/memory/infrastructure/persistence/postgresql/migrations",
+        ) + sep,
+      )
+    )
+      continue;
+    let directory = dirname(path);
+    while (directory.startsWith(sourceRoot.replace(/\/$/, ""))) {
+      directories.add(directory);
+      if (directory === sourceRoot.replace(/\/$/, "")) break;
+      directory = dirname(directory);
+    }
+  }
+  for (const directory of directories)
+    assert(
+      paths.includes(resolve(directory, "index.ts")),
+      `Missing index.ts in ${directory}`,
+    );
+  const program = ts.createProgram(paths, {
+    target: ts.ScriptTarget.ESNext,
+    module: ts.ModuleKind.ESNext,
+    moduleResolution: ts.ModuleResolutionKind.Bundler,
+    allowImportingTsExtensions: true,
+    noEmit: true,
+    skipLibCheck: true,
+  });
+  for (const path of paths) {
+    assert.deepEqual(provenanceViolations(program, path), []);
+    const file = relative(sourceRoot, path).split(sep).join("/");
+    if (
+      basename(path) !== "index.ts" ||
+      file.startsWith("bootstrap/") ||
+      file.startsWith("entrypoints/")
+    )
+      continue;
+    for (const statement of program.getSourceFile(path)!.statements) {
+      assert(
+        ts.isExportDeclaration(statement) &&
+          statement.moduleSpecifier &&
+          statement.exportClause,
+        `${file} must explicitly re-export its public API`,
+      );
+    }
+  }
+});
+
+test("tracked TypeScript imports use indexes across directories", () => {
+  execFileSync(
+    process.execPath,
+    [resolve(repositoryRoot, "scripts/check-staged-paths.ts")],
+    { cwd: repositoryRoot },
+  );
+  const paths = execFileSync(
+    "git",
+    ["ls-files", "--cached", "-z", "*.ts", "*.tsx", "*.mts", "*.cts"],
+    { cwd: repositoryRoot, encoding: "utf8" },
+  )
+    .split("\0")
+    .filter(Boolean);
+  const failures: string[] = [];
+  for (const path of paths) {
+    if (path === "apps/ezer-memory/worker-configuration.d.ts") continue;
+    const source = ts.createSourceFile(
+      path,
+      readFileSync(resolve(repositoryRoot, path), "utf8"),
+      ts.ScriptTarget.Latest,
+      true,
+    );
+    const inspect = (node: ts.Node) => {
+      let dependency: string | undefined;
+      if (
+        (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
+        node.moduleSpecifier &&
+        ts.isStringLiteral(node.moduleSpecifier)
+      )
+        dependency = node.moduleSpecifier.text;
+      if (
+        ts.isImportTypeNode(node) &&
+        ts.isLiteralTypeNode(node.argument) &&
+        ts.isStringLiteral(node.argument.literal)
+      )
+        dependency = node.argument.literal.text;
+      if (
+        ts.isCallExpression(node) &&
+        (node.expression.kind === ts.SyntaxKind.ImportKeyword ||
+          (ts.isIdentifier(node.expression) &&
+            node.expression.text === "require")) &&
+        node.arguments[0] &&
+        ts.isStringLiteral(node.arguments[0])
+      )
+        dependency = node.arguments[0].text;
+      if (dependency !== undefined) {
+        const reason = pathViolation(path, dependency);
+        if (reason) failures.push(`${path} -> ${dependency}: ${reason}`);
+      }
+      ts.forEachChild(node, inspect);
+    };
+    inspect(source);
+  }
+  assert.deepEqual(failures, []);
+  for (const dependency of [
+    "../domain/memory-revision.ts",
+    "../domain",
+    "./index.ts",
+  ])
+    assert(pathViolation("modules/memory/application/commit.ts", dependency));
+  for (const dependency of [
+    "../domain/index.ts",
+    "./helper.ts",
+    "node:crypto",
+    "../../package.json",
+  ])
+    assert.equal(
+      pathViolation("modules/memory/application/commit.ts", dependency),
+      undefined,
+    );
+});
+
+test("parent indexes cannot hide sibling adapters or reverse layer dependencies", () => {
+  const adapter = "modules/memory/infrastructure/persistence/";
+  const siblingCaller = `${adapter}durable-object/example.ts`;
+  const applicationCaller = "modules/memory/application/example.ts";
+  const sources = new Map<string, string>([
+    [`${adapter}sqlite/session.ts`, "export interface SqlSession {}"],
+    [
+      `${adapter}sqlite/index.ts`,
+      'export type { SqlSession } from "./session.ts";',
+    ],
+    [
+      `${adapter}index.ts`,
+      'export type { SqlSession } from "./sqlite/index.ts";',
+    ],
+    [
+      "modules/memory/ports/inbound/index.ts",
+      'export type { SqlSession } from "../../infrastructure/persistence/sqlite/index.ts";',
+    ],
+  ]);
+  const siblingCases = [
+    'import type { SqlSession } from "../index.ts";',
+    'import type * as adapter from "../index.ts";',
+    'type Session = import("../index.ts").SqlSession;',
+    'export type { SqlSession } from "../index.ts";',
+    'export type * from "../index.ts";',
+  ];
+  const cases: [string, string][] = [
+    ...siblingCases.map((content): [string, string] => [
+      siblingCaller,
+      content,
+    ]),
+    [
+      applicationCaller,
+      'import type { SqlSession } from "../ports/inbound/index.ts";',
+    ],
+  ];
+  for (const [caller, content] of cases) {
+    const files = new Map(
+      [...sources, [caller, content] as const].map(([path, source]) => [
+        resolve(sourceRoot, path),
+        source,
+      ]),
+    );
+    const options: ts.CompilerOptions = {
+      module: ts.ModuleKind.ESNext,
+      moduleResolution: ts.ModuleResolutionKind.Bundler,
+      noEmit: true,
+      noLib: true,
+      types: [],
+    };
+    const host = ts.createCompilerHost(options);
+    host.fileExists = (path) => files.has(path);
+    host.readFile = (path) => files.get(path);
+    host.getSourceFile = (path, version) =>
+      files.has(path)
+        ? ts.createSourceFile(path, files.get(path)!, version, true)
+        : undefined;
+    const program = ts.createProgram([...files.keys()], options, host);
+    assert(
+      provenanceViolations(program, resolve(sourceRoot, caller)).length > 0,
+      content,
+    );
+  }
 });

@@ -3,7 +3,7 @@ import {
   type SQLSchemaMigration,
 } from "durable-utils/sql-migrations";
 import { assertSupportedSchema } from "./assert-supported-schema.ts";
-import { migrations } from "./migrations/migrations.generated.ts";
+import { migrations } from "./migrations/index.ts";
 import { createSqlSession } from "./create-sql-session.ts";
 const ledgerKey = "memory:schema-version";
 

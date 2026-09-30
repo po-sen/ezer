@@ -1,5 +1,5 @@
-import { PersistenceFault } from "../../../ports/outbound/persistence-fault.ts";
-import type { UnitOfWork } from "../../../ports/outbound/unit-of-work.ts";
+import { PersistenceFault } from "../../../ports/outbound/index.ts";
+import type { UnitOfWork } from "../../../ports/outbound/index.ts";
 import { createIndividualStateStore } from "./individual-state-store.ts";
 import { createOperationStore } from "./operation-store.ts";
 import { createRevisionStore } from "./revision-store.ts";

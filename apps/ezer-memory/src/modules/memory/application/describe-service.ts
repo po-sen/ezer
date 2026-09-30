@@ -1,4 +1,4 @@
-import type { DescribeMemoryService } from "../ports/inbound/describe-service.ts";
+import type { DescribeMemoryService } from "../ports/inbound/index.ts";
 
 export function createDescribeMemoryService(
   version: string,

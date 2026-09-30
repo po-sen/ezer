@@ -16,8 +16,8 @@
     "check": "pnpm run migrations:check && pnpm run types:check && pnpm run typecheck && pnpm test && pnpm run test:postgresql && pnpm run build",
     "migrations:generate": "node scripts/generate-migrations.ts --write",
     "migrations:check": "node scripts/generate-migrations.ts",
-    "migrate:sqlite": "node src/entrypoints/migrate-sqlite.ts",
-    "migrate:postgresql": "node src/entrypoints/migrate-postgresql.ts",
+    "migrate:sqlite": "node src/entrypoints/migrate-sqlite/index.ts",
+    "migrate:postgresql": "node src/entrypoints/migrate-postgresql/index.ts",
     "test:postgresql": "node --test tests/postgresql-migrations.test.ts"
   },
   "dependencies": {

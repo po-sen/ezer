@@ -62,6 +62,12 @@ The Worker selects Durable Object. SQLite has a Node SQLite migration CLI alongs
 its runtime-independent Stores. PostgreSQL has its own schema migration CLI. Neither
 backend yet has a standalone memory-serving deployment. The SQLite component test uses a disposable
 database and a test-only session, not the production Durable Object adapter.
+Public module APIs live in explicit `index.ts` files. Cross-directory source imports
+use those APIs; same-directory implementations reference each other directly. Indexes
+do not permit reversed layer dependencies or access to sibling infrastructure through
+a parent facade. SQLite keeps its Node migration operations in `sqlite/cli/`, separate
+from the portable Store index.
+
 Entrypoints own platform lifecycle and CLI dispatch; bootstrap composes implementations;
 delivery owns RPC validation and delegation to inbound ports.
 

@@ -1,6 +1,6 @@
 import { z } from "zod";
-import type { CommitMemory } from "../ports/inbound/commit-memory.ts";
-import type { InspectMemory } from "../ports/inbound/inspect-memory.ts";
+import type { CommitMemory, InspectMemory } from "../ports/inbound/index.ts";
+
 const content = {
   operationId: z.string(),
   memoryId: z.string(),

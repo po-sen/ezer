@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { relative, resolve, sep } from "node:path";
+import { basename, relative, resolve, sep } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
@@ -21,6 +21,7 @@ function exportViolation(
 ): string | undefined {
   const file = relative(repositoryRoot, path).split(sep).join("/");
   if (
+    basename(file) === "index.ts" ||
     file === "apps/ezer-memory/worker-configuration.d.ts" ||
     file.startsWith("apps/ezer-memory/src/bootstrap/") ||
     file.startsWith("apps/ezer-memory/src/entrypoints/")
@@ -102,6 +103,8 @@ test("the export guard counts types, values, aliases, defaults, and re-exports",
     ],
     ["apps/ezer-memory/vitest.config.ts", false],
     ["scripts/example.ts", false],
+    ["apps/ezer-memory/src/modules/memory/domain/index.ts", true],
+    ["apps/ezer-memory/src/modules/memory/domain/not-index.ts", false],
   ];
   for (const [file] of exceptionCases)
     sources.set(

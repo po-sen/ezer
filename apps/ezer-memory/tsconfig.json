@@ -15,5 +15,5 @@
     "noEmit": true,
     "allowImportingTsExtensions": true
   },
-  "include": ["src/entrypoints/worker.ts"]
+  "include": ["src/entrypoints/index.ts"]
 }

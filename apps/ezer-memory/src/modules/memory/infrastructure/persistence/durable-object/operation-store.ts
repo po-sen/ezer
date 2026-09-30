@@ -1,4 +1,4 @@
-import type { OperationStore } from "../../../ports/outbound/operation-store.ts";
+import type { OperationStore } from "../../../ports/outbound/index.ts";
 import type { SqlSession } from "./session.ts";
 export function createOperationStore(session: SqlSession): OperationStore {
   return {

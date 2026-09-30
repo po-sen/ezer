@@ -1,8 +1,8 @@
-import { MemoryFault } from "../domain/memory-fault.ts";
-import { validateMemoryId } from "../domain/validate-memory-id.ts";
-import type { InspectMemory } from "../ports/inbound/inspect-memory.ts";
-import { PersistenceFault } from "../ports/outbound/persistence-fault.ts";
-import type { UnitOfWork } from "../ports/outbound/unit-of-work.ts";
+import { MemoryFault, validateMemoryId } from "../domain/index.ts";
+
+import type { InspectMemory } from "../ports/inbound/index.ts";
+import { PersistenceFault } from "../ports/outbound/index.ts";
+import type { UnitOfWork } from "../ports/outbound/index.ts";
 export function createInspectMemory(unitOfWork: UnitOfWork): InspectMemory {
   return {
     execute(lookup) {

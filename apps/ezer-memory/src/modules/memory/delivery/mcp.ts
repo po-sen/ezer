@@ -1,6 +1,6 @@
 import { createMcpHandler, McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
-import type { DescribeMemoryService } from "../ports/inbound/describe-service.ts";
+import type { DescribeMemoryService } from "../ports/inbound/index.ts";
 
 export function createMemoryMcpHandler(describeService: DescribeMemoryService) {
   return createMcpHandler(

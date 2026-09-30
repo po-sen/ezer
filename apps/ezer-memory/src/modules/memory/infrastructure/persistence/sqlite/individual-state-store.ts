@@ -1,5 +1,5 @@
-import type { IndividualStateStore } from "../../../ports/outbound/individual-state-store.ts";
-import { PersistenceFault } from "../../../ports/outbound/persistence-fault.ts";
+import type { IndividualStateStore } from "../../../ports/outbound/index.ts";
+import { PersistenceFault } from "../../../ports/outbound/index.ts";
 import type { SqlSession } from "./session.ts";
 export function createIndividualStateStore(
   session: SqlSession,

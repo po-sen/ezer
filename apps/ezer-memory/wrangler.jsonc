@@ -1,7 +1,7 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "ezer-memory",
-  "main": "src/entrypoints/worker.ts",
+  "main": "src/entrypoints/index.ts",
   "compatibility_date": "2026-09-26",
   "compatibility_flags": ["nodejs_compat"],
   "secrets": { "required": [] },

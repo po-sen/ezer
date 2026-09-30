@@ -1,4 +1,4 @@
-import type { MemoryRevision } from "../../domain/memory-revision.ts";
+import type { MemoryRevision } from "../../domain/index.ts";
 // An append-only ledger, not a mutable aggregate collection.
 export interface RevisionStore {
   find(memoryId: string, revision?: number): MemoryRevision | null;
