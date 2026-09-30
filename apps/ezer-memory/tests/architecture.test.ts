@@ -165,7 +165,7 @@ function responsibilityViolations(file: string, text: string): string[] {
   const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
   const layer = file.split("/")[1];
   const generatedSql =
-    file === "memory/infrastructure/persistence/migrations/generated.ts";
+    file === "memory/infrastructure/persistence/sqlite/migrations/generated.ts";
   const nativeSql = file.startsWith("memory/infrastructure/persistence/");
   const inner = [
     "domain",

@@ -42,6 +42,44 @@ and a runtime guard; Store capabilities expire when the callback returns or thro
 They stay expired during later transactions. Provider/network/model work never
 runs inside the transaction. Nested transactions are rejected.
 
+## Persistence ownership and context separation
+
+SQLite SQL, migration pairs, checksum pins, the generated SQL bundle, and its
+runner belong to `infrastructure/persistence/sqlite/`. A future PostgreSQL adapter
+would own a separate `infrastructure/persistence/postgresql/migrations/` history.
+Database dialects, version ledgers, and deployment lifecycles are adapter-specific;
+SQLite migration files are not a portable schema or a PostgreSQL upgrade history.
+Moving files does not change the current SQL bytes, checksum pins, or native ledger.
+
+SQLite does not provide PostgreSQL-style `CREATE SCHEMA` namespaces. Its `main`,
+`temp`, and attached-database qualifiers name databases, not independent schemas
+inside one database. Durable Objects additionally disallow attached databases;
+each object's SQLite storage is private to that object. See the
+[SQLite ATTACH documentation](https://www.sqlite.org/lang_attach.html) and
+[workerd's attachment restriction](https://github.com/cloudflare/workerd/blob/main/src/workerd/util/sqlite.c%2B%2B).
+
+Only Memory exists today. When another bounded context is introduced, choose and
+review its physical storage boundary explicitly. Separate SQLite databases (for
+Durable Objects, separate context-owned classes/namespaces and instances) provide
+physical separation. If contexts share a database instead, table prefixes and
+separate migration ledgers provide naming separation only; application ownership
+rules must still prevent cross-context SQL, foreign keys, and transactions. A
+PostgreSQL deployment can use one schema per context with context-owned migrations
+and appropriately restricted roles. None of these choices creates a new context
+merely because a table or provider has a different name.
+
+For separate context-owned Durable Objects, a future logical Ezer identity must
+map to each context's object; namespace-specific object IDs are not a shared
+cross-context identity contract. Integration goes through provider inbound ports
+or explicit events, never another context's database. That topology and identity
+mapping are not implemented by this directory change.
+
+PostgreSQL is not currently a drop-in adapter: the synchronous Store and Unit of
+Work contracts reflect Durable Object SQLite's `transactionSync`. Supporting a
+networked PostgreSQL driver also requires an asynchronous port/application design,
+its own adapter tests, and an explicit data/identity transfer plan. Pure domain
+rules remain independent of the database technology.
+
 ## Cloudflare adaptations
 
 These adaptations belong to the memory service, not domain policy. Revisit them

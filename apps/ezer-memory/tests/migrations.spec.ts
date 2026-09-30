@@ -6,7 +6,7 @@ import { initializeIndividual } from "../src/memory/infrastructure/persistence/s
 import {
   migrations,
   reversals,
-} from "../src/memory/infrastructure/persistence/migrations/generated";
+} from "../src/memory/infrastructure/persistence/sqlite/migrations/generated";
 
 function individual() {
   return env.EZER_MEMORY.get(env.EZER_MEMORY.newUniqueId());

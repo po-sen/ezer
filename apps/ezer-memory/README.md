@@ -141,7 +141,7 @@ with the `EZER_MEMORY` binding. The pinned Wrangler supports this configuration;
 it must not be combined with the legacy `migrations` array. This declaration does
 not provision anything until a separately authorized deployment.
 
-Versioned SQL pairs live in `src/memory/infrastructure/persistence/migrations/`.
+Versioned SQL pairs live in `src/memory/infrastructure/persistence/sqlite/migrations/`.
 `durable-utils@0.3.7`, recommended in Cloudflare's migration documentation, owns
 SQL execution and the atomic native KV version ledger. The runner is not patched.
 Before serving requests, the object initializes that runner inside

@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 // Build-time SQL packaging only. durable-utils owns migration execution and state.
 const directory = new URL(
-  "../src/memory/infrastructure/persistence/migrations/",
+  "../src/memory/infrastructure/persistence/sqlite/migrations/",
   import.meta.url,
 );
 const files = readdirSync(directory)

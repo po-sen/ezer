@@ -2,7 +2,7 @@ import {
   SQLSchemaMigrations,
   type SQLSchemaMigration,
 } from "durable-utils/sql-migrations";
-import { migrations } from "../migrations/generated";
+import { migrations } from "./migrations/generated";
 const ledgerKey = "memory:schema-version";
 
 export function migrateMemory(

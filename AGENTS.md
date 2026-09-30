@@ -72,8 +72,9 @@ Delivery uses inbound ports, and bootstrap only composes implementations.
 Commands, queries, and detached views belong to inbound ports; domain types must
 not serve as wire contracts. A focused Unit of Work owns transaction demarcation;
 Stores do not begin or commit transactions. Keep versioned SQL pairs under the
-owning context's `infrastructure/persistence/migrations/`; never embed handwritten
-DDL in TypeScript. Review SQL and checksum changes before regenerating the bundle.
+owning context's `infrastructure/persistence/<technology>/migrations/` (currently
+`sqlite`); migrations and their generated bundles belong to the database adapter.
+Never embed handwritten DDL in TypeScript. Review SQL and checksum changes before regenerating the bundle.
 Released migration files and pins are immutable. See the memory context README
 for explicit Cloudflare lifecycle and forward-only recovery adaptations. Add
 layers when they have real responsibilities, not as empty scaffolding. Extend
