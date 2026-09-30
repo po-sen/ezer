@@ -3,7 +3,7 @@ import {
   createMigrationRunner,
   inspectMigrations,
   migrateMemory,
-} from "../../modules/memory/infrastructure/persistence/sqlite/cli/index.ts";
+} from "../modules/memory/infrastructure/persistence/sqlite/cli/index.ts";
 
 export function createSqliteMigrator(path: string, readOnly: boolean) {
   const database = openDatabase(path, readOnly);

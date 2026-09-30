@@ -7,7 +7,7 @@
     "types": ["node"]
   },
   "include": [
-    "src/entrypoints/migrate-*/index.ts",
+    "src/entrypoints/migrate-*.ts",
     "scripts/**/*.ts",
     "tests/migration-cli.test.ts",
     "tests/postgresql-migrations.test.ts"

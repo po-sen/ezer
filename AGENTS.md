@@ -72,28 +72,34 @@ Put runtime and operational entrypoints in `src/entrypoints/`. Bootstrap contain
 composition factories; Cloudflare lifecycle and RPC delegation stay in entrypoints.
 For now, these directories must have equal TypeScript file counts and pair
 one-to-one: each entrypoint imports exactly one bootstrap module, and each bootstrap
-module belongs to exactly one entrypoint at the matching relative path. The Worker
-HTTP handler and Durable Object class share `entrypoints/index.ts`; their composition
-shares `bootstrap/index.ts`. Each migration CLI has its own subdirectory and index
-in both trees. Never aggregate Node CLI entrypoints into the Worker entrypoint.
+module belongs to exactly one entrypoint. Both directories stay flat and use named
+implementation files, without indexes or per-command subdirectories. The Worker
+HTTP handler and Durable Object class share `entrypoints/worker.ts`; their composition
+shares `bootstrap/create-worker.ts`. Each migration CLI has its own entrypoint and
+composition file. Never aggregate Node CLI entrypoints into the Worker entrypoint.
 Keep the Node migration CLIs separate from the Worker dependency graph. Worker
 and CLI have separate TypeScript configurations; use explicit `.ts` extensions
 for repository source imports so Node can execute the CLI without a custom loader.
 Keep build-time SQL packaging in `scripts/`.
 
-Every source module directory has an `index.ts` that explicitly exposes its public
-API. Cross-directory imports, type imports, and re-exports of repository TypeScript
-must target `index.ts` with an explicit `.ts` extension. Within a directory, import
+Every source module directory except bootstrap and entrypoints has an `index.ts`
+that explicitly exposes its public API. Cross-directory imports, type imports,
+and re-exports of repository TypeScript must target `index.ts`, except references
+to the flat, named bootstrap and entrypoint files. All use an explicit `.ts`
+extension. Bootstrap must still consume the public indexes of context modules.
+Within a directory, import
 implementation files directly; never import the directory's own index back into
 its implementations. External packages, platform modules, JSON metadata, and
 official generated declarations retain their native import conventions. Tests and
 development scripts obey the same import rule but need no barrel unless they expose
 a reusable module. File-discovered migration resources do not need an index.
 
+Every `index.ts` is a pure barrel containing only explicit re-export declarations
+(`export { ... } from` or `export type ... from`). Never put imports, local
+declarations, functions, classes, initialization, or other executable statements in
+an index. This applies repository-wide, without bootstrap or entrypoint exceptions.
 Indexes do not relax architecture boundaries: validate the original declaration
-behind aliases, namespace imports, and re-exports. Module indexes contain explicit
-re-exports, not wrappers hiding dependencies; runtime entrypoint/bootstrap indexes
-retain their lifecycle/composition responsibilities. Context grouping indexes expose
+behind aliases, namespace imports, and re-exports. Context grouping indexes expose
 public inbound contracts; the persistence grouping index exposes adapter namespaces
 as types only. Runtime composition imports the selected adapter's index directly.
 SQLite's portable Stores and Node-only `sqlite/cli/` have separate indexes so Worker

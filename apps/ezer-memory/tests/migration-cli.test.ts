@@ -56,7 +56,7 @@ function pin(directory: string) {
 function cli(adapter: string, args: string[]) {
   return spawnSync(
     process.execPath,
-    [join(appRoot, `src/entrypoints/migrate-${adapter}/index.ts`), ...args],
+    [join(appRoot, `src/entrypoints/migrate-${adapter}.ts`), ...args],
     {
       encoding: "utf8",
       // Tests never inherit database credentials or runtime flags from the host.

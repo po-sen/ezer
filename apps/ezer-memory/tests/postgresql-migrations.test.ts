@@ -81,7 +81,7 @@ test("PostgreSQL CLI upgrades only memory and status never creates a schema", as
     spawnSync(
       process.execPath,
       [
-        join(appRoot, "src/entrypoints/migrate-postgresql/index.ts"),
+        join(appRoot, "src/entrypoints/migrate-postgresql.ts"),
         action,
         "--database",
         database,

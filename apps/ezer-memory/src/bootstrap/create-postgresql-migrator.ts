@@ -3,7 +3,7 @@ import {
   readMigrationPlan,
   inspectMigrations,
   migrateMemory,
-} from "../../modules/memory/infrastructure/persistence/postgresql/index.ts";
+} from "../modules/memory/infrastructure/persistence/postgresql/index.ts";
 
 export function createPostgresqlMigrator(
   options: Parameters<typeof openDatabase>[0],

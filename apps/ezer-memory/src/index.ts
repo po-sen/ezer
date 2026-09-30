@@ -1,1 +1,1 @@
-export { default, EzerMemory } from "./entrypoints/index.ts";
+export { default, EzerMemory } from "./entrypoints/worker.ts";

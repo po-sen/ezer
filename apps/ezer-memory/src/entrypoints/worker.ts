@@ -1,5 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
-import { createMemory, createWorker } from "../bootstrap/index.ts";
+import { createMemory, createWorker } from "../bootstrap/create-worker.ts";
 
 export class EzerMemory extends DurableObject<Env> {
   #memory: ReturnType<typeof createMemory>;

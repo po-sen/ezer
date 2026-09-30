@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const map = JSON.parse(
-  readFileSync(new URL("../dist/index.js.map", import.meta.url), "utf8"),
+  readFileSync(new URL("../dist/worker.js.map", import.meta.url), "utf8"),
 ) as { sources: string[] };
 const forbidden =
   /(?:node-pg-migrate|postgrator|\/pg\/|\/pg@|\/persistence\/(?:sqlite|postgresql)\/|migrate-(?:sqlite|postgresql)|generate-migrations)/;

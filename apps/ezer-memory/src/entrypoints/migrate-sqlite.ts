@@ -1,5 +1,5 @@
 import { parseArgs } from "node:util";
-import { createSqliteMigrator } from "../../bootstrap/migrate-sqlite/index.ts";
+import { createSqliteMigrator } from "../bootstrap/create-sqlite-migrator.ts";
 
 const usage = "Usage: migrate:sqlite <status|up> --database <file>";
 try {

@@ -69,23 +69,24 @@ independently; sharing a database engine does not couple their migration histori
 Each Store uses a scoped SQL session and cannot begin or commit transactions.
 Infrastructure normalizes SQL failures; application maps them to use-case failures;
 delivery validates wire shape and returns bounded results. Bootstrap composes these
-implementations. `src/entrypoints/index.ts` is Wrangler's main module;
+implementations. `src/entrypoints/worker.ts` is Wrangler's main module;
 it also owns the Durable Object class, Cloudflare lifecycle, and RPC delegation.
-`src/bootstrap/index.ts` composes both the HTTP and Durable Object handlers.
+`src/bootstrap/create-worker.ts` composes both the HTTP and Durable Object handlers.
 Operational CLI entrypoints live alongside the Worker entrypoint, but are excluded from the Worker
 bundle. `src/bootstrap/` contains composition factories and `src/modules/` contains
 bounded contexts. Build tooling stays under `scripts/`.
 
 Entrypoints and bootstrap currently have equal file counts and pair one-to-one:
 
-| Entrypoint                    | Bootstrap                     |
-| ----------------------------- | ----------------------------- |
-| `index.ts`                    | `index.ts`                    |
-| `migrate-sqlite/index.ts`     | `migrate-sqlite/index.ts`     |
-| `migrate-postgresql/index.ts` | `migrate-postgresql/index.ts` |
+| Entrypoint              | Bootstrap                       |
+| ----------------------- | ------------------------------- |
+| `worker.ts`             | `create-worker.ts`              |
+| `migrate-sqlite.ts`     | `create-sqlite-migrator.ts`     |
+| `migrate-postgresql.ts` | `create-postgresql-migrator.ts` |
 
 Each entrypoint imports only its corresponding bootstrap module and permitted
-platform APIs. A bootstrap module cannot be shared by multiple entrypoints.
+platform APIs. Both directories stay flat, use named implementation files, and
+have no indexes. A bootstrap module cannot be shared by multiple entrypoints.
 These two directories and all `index.ts` modules allow multiple exports. Other
 repository-owned TypeScript modules allow at most one exported name, including
 types and re-exports; zero exports are allowed. Only the official generated Worker
@@ -94,10 +95,14 @@ are generated into separate single-export modules. Architecture and export
 tests enforce these rules, including configuration and root development scripts.
 
 Across source directories, import the directory's explicit `index.ts` public API.
+References to named bootstrap and entrypoint files are the only source-module
+exception; bootstrap still imports context modules through their indexes.
+Every `index.ts` contains only explicit re-export declarations, with no imports,
+local declarations, functions, classes, initialization, or other executable code.
 Within a directory, reference implementation files directly to avoid importing
 back through their own barrel. Indexes preserve DDD and adapter ownership; checks
 follow imported declarations through named, type, namespace, and chained re-exports.
-Every source module directory has an index, including grouping directories. Pure
+Every other source module directory has an index, including grouping directories. Pure
 SQL/file-discovered migration resources, tests, and build scripts do not need empty
 barrels. Context grouping indexes expose inbound contracts; persistence grouping
 exports are type-only so they do not combine incompatible runtimes.

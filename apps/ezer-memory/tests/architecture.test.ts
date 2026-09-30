@@ -30,7 +30,7 @@ function violation(file: string, dependency: string): string | undefined {
         .replace(/\.ts$/, "")
     : dependency;
   const facades: Record<string, readonly string[]> = {
-    "index.ts": ["entrypoints/index"],
+    "index.ts": ["entrypoints/worker"],
     "modules/index.ts": ["modules/memory/index"],
     "modules/memory/index.ts": ["modules/memory/ports/index"],
     "modules/memory/ports/index.ts": ["modules/memory/ports/inbound/index"],
@@ -43,10 +43,7 @@ function violation(file: string, dependency: string): string | undefined {
       ? undefined
       : "context facade must expose its declared public API";
   if (file.startsWith("entrypoints/")) {
-    const bootstrap = file
-      .replace(/^entrypoints\//, "bootstrap/")
-      .replace(/\.ts$/, "");
-    return target === bootstrap ||
+    return /^bootstrap\/[^/]+$/.test(target) ||
       ["cloudflare:workers", "node:util"].includes(target)
       ? undefined
       : "entrypoint must delegate to its corresponding bootstrap";
@@ -125,16 +122,20 @@ function sourceFiles(directory: string): string[] {
 
 function pathViolation(file: string, dependency: string): string | undefined {
   if (!dependency.startsWith(".") || dependency.endsWith(".json")) return;
-  const target = resolve(dirname(file), dependency);
+  const directory = resolve(sourceRoot, dirname(file));
+  const target = resolve(directory, dependency);
   if (!dependency.endsWith(".ts"))
     return "source imports must use an explicit .ts extension";
   if (
-    dirname(target) !== resolve(dirname(file)) &&
-    basename(target) !== "index.ts"
+    dirname(target) !== directory &&
+    basename(target) !== "index.ts" &&
+    !["bootstrap", "entrypoints"].some(
+      (directory) => dirname(target) === resolve(sourceRoot, directory),
+    )
   )
     return "cross-directory imports must use index.ts";
   if (
-    dirname(target) === resolve(dirname(file)) &&
+    dirname(target) === directory &&
     basename(target) === "index.ts" &&
     basename(file) !== "index.ts"
   )
@@ -218,7 +219,7 @@ test("the boundary guard rejects SDK leakage, reversed dependencies, and foreign
       "../application/commit-memory",
     ],
     [
-      "entrypoints/index.ts",
+      "entrypoints/worker.ts",
       "../modules/memory/infrastructure/sqlite-memory-store",
     ],
     [
@@ -238,7 +239,7 @@ test("the boundary guard rejects SDK leakage, reversed dependencies, and foreign
       "../../../domain/memory-revision",
     ],
     [
-      "entrypoints/migrate-sqlite/index.ts",
+      "entrypoints/migrate-sqlite.ts",
       "../modules/memory/infrastructure/persistence/sqlite/migrate-memory.ts",
     ],
     [
@@ -471,6 +472,10 @@ function pairingViolations(files: ReadonlyMap<string, string>): string[] {
   );
   const failures: string[] = [];
   const owners = new Map<string, string[]>();
+  for (const file of [...entrypoints, ...bootstraps]) {
+    if (file.split("/").length !== 2 || basename(file) === "index.ts")
+      failures.push(`${file} must be a flat, named runtime module`);
+  }
   if (entrypoints.length !== bootstraps.length)
     failures.push("entrypoints and bootstrap must have equal file counts");
   for (const entrypoint of entrypoints) {
@@ -510,8 +515,6 @@ function pairingViolations(files: ReadonlyMap<string, string>): string[] {
     if (dependencies.size !== 1)
       failures.push(`${entrypoint} must import exactly one bootstrap module`);
     for (const dependency of dependencies) {
-      if (dependency !== entrypoint.replace(/^entrypoints\//, "bootstrap/"))
-        failures.push(`${entrypoint} must use its matching bootstrap path`);
       if (!bootstraps.includes(dependency))
         failures.push(
           `${entrypoint} imports a missing bootstrap: ${dependency}`,
@@ -562,6 +565,20 @@ test("the pairing guard rejects shared, missing, orphaned, and multiple bootstra
   const orphan = new Map(valid);
   orphan.set("bootstrap/orphan.ts", "export const orphan = {};");
   assert(pairingViolations(orphan).length > 0);
+  for (const name of ["index.ts", "migrate-sqlite/index.ts"]) {
+    assert(
+      pairingViolations(
+        new Map([
+          [
+            `entrypoints/${name}`,
+            `export { create } from "${name.includes("/") ? "../../" : "../"}bootstrap/${name}";`,
+          ],
+          [`bootstrap/${name}`, "export function create() {}"],
+        ]),
+      ).length > 0,
+      name,
+    );
+  }
 });
 
 function importedOrigins(
@@ -637,6 +654,10 @@ test("source folders expose explicit indexes without bypassing dependency owners
   const paths = sourceFiles(sourceRoot);
   const directories = new Set<string>();
   for (const path of paths) {
+    // Executable entrypoints and composition factories use flat, named modules.
+    const file = relative(sourceRoot, path).split(sep).join("/");
+    if (file.startsWith("bootstrap/") || file.startsWith("entrypoints/"))
+      continue;
     // Native PostgreSQL migrations are discovered as files, not imported as a module.
     if (
       path.startsWith(
@@ -669,23 +690,18 @@ test("source folders expose explicit indexes without bypassing dependency owners
   });
   for (const path of paths) {
     assert.deepEqual(provenanceViolations(program, path), []);
-    const file = relative(sourceRoot, path).split(sep).join("/");
-    if (
-      basename(path) !== "index.ts" ||
-      file.startsWith("bootstrap/") ||
-      file.startsWith("entrypoints/")
-    )
-      continue;
-    for (const statement of program.getSourceFile(path)!.statements) {
-      assert(
-        ts.isExportDeclaration(statement) &&
-          statement.moduleSpecifier &&
-          statement.exportClause,
-        `${file} must explicitly re-export its public API`,
-      );
-    }
   }
 });
+
+function isPureBarrel(source: ts.SourceFile): boolean {
+  return source.statements.every(
+    (statement) =>
+      ts.isExportDeclaration(statement) &&
+      statement.moduleSpecifier !== undefined &&
+      ts.isStringLiteral(statement.moduleSpecifier) &&
+      statement.exportClause !== undefined,
+  );
+}
 
 test("tracked TypeScript imports use indexes across directories", () => {
   execFileSync(
@@ -709,6 +725,8 @@ test("tracked TypeScript imports use indexes across directories", () => {
       ts.ScriptTarget.Latest,
       true,
     );
+    if (basename(path) === "index.ts" && !isPureBarrel(source))
+      failures.push(`${path} must contain only explicit re-exports`);
     const inspect = (node: ts.Node) => {
       let dependency: string | undefined;
       if (
@@ -733,7 +751,7 @@ test("tracked TypeScript imports use indexes across directories", () => {
       )
         dependency = node.arguments[0].text;
       if (dependency !== undefined) {
-        const reason = pathViolation(path, dependency);
+        const reason = pathViolation(resolve(repositoryRoot, path), dependency);
         if (reason) failures.push(`${path} -> ${dependency}: ${reason}`);
       }
       ts.forEachChild(node, inspect);
@@ -757,6 +775,43 @@ test("tracked TypeScript imports use indexes across directories", () => {
       pathViolation("modules/memory/application/commit.ts", dependency),
       undefined,
     );
+  assert.equal(
+    pathViolation("entrypoints/worker.ts", "../bootstrap/create-worker.ts"),
+    undefined,
+  );
+  assert(
+    pathViolation(
+      "bootstrap/create-worker.ts",
+      "../modules/memory/application/commit-memory.ts",
+    ),
+  );
+});
+
+test("index files contain only explicit re-exports", () => {
+  for (const [content, expected] of [
+    ['export { createWorker } from "./create-worker.ts";', true],
+    ['export type { MemoryWrite } from "./memory-write.ts";', true],
+    ['export { default } from "./worker.ts";', true],
+    ['export type * as Adapter from "./adapter/index.ts";', true],
+    [
+      'import { createWorker } from "./create-worker.ts"; export { createWorker };',
+      false,
+    ],
+    ["export function createWorker() {}", false],
+    ["export class Worker {}", false],
+    ["export const worker = {};", false],
+    ["export interface Memory {}", false],
+    ["export default createWorker();", false],
+    ['console.log("initialized");', false],
+  ] as const) {
+    assert.equal(
+      isPureBarrel(
+        ts.createSourceFile("index.ts", content, ts.ScriptTarget.Latest, true),
+      ),
+      expected,
+      content,
+    );
+  }
 });
 
 test("parent indexes cannot hide sibling adapters or reverse layer dependencies", () => {

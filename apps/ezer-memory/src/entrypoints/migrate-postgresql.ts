@@ -1,5 +1,5 @@
 import { parseArgs } from "node:util";
-import { createPostgresqlMigrator } from "../../bootstrap/migrate-postgresql/index.ts";
+import { createPostgresqlMigrator } from "../bootstrap/create-postgresql-migrator.ts";
 
 const usage =
   "Usage: migrate:postgresql <status|up> --database <name> [--host <host>] [--port <port>] [--user <user>]. Supply credentials through the deployment environment.";
