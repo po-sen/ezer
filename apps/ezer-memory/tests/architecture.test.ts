@@ -11,7 +11,7 @@ const internalLayers: Record<string, readonly string[]> = {
   inboundport: ["inboundport"],
   outboundport: ["domain", "outboundport"],
   application: ["domain", "inboundport", "outboundport", "application"],
-  infrastructure: ["domain", "outboundport", "infrastructure"],
+  infrastructure: ["outboundport", "infrastructure"],
   delivery: ["inboundport", "delivery"],
 };
 
@@ -61,12 +61,16 @@ function violation(file: string, dependency: string): string | undefined {
     .split(sep)
     .join("/");
   const [targetContext, targetLayer] = target.split("/");
-  if (
-    file.startsWith("memory/infrastructure/persistence/sqlite/") &&
-    target.startsWith("memory/infrastructure/") &&
-    !target.startsWith("memory/infrastructure/persistence/sqlite/")
-  )
-    return "SQLite must not depend on a runtime adapter";
+  if (layer === "infrastructure" && targetLayer === "infrastructure") {
+    const sourceDirectory = dirname(file);
+    const targetDirectory = dirname(target);
+    if (
+      sourceDirectory !== targetDirectory &&
+      !targetDirectory.startsWith(`${sourceDirectory}/`) &&
+      !sourceDirectory.startsWith(`${targetDirectory}/`)
+    )
+      return "infrastructure cannot import a sibling directory";
+  }
   if (targetContext !== context)
     return "cross-context dependency outside an explicit integration";
   if (
@@ -86,47 +90,46 @@ function sourceFiles(directory: string): string[] {
   });
 }
 
+function importViolations(file: string, text: string): string[] {
+  const failures: string[] = [];
+  const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
+  const inspect = (node: ts.Node) => {
+    let dependency: string | undefined;
+    if (
+      (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
+      node.moduleSpecifier
+    ) {
+      assert(ts.isStringLiteral(node.moduleSpecifier));
+      dependency = node.moduleSpecifier.text;
+    } else if (
+      ts.isImportTypeNode(node) &&
+      ts.isLiteralTypeNode(node.argument) &&
+      ts.isStringLiteral(node.argument.literal)
+    ) {
+      dependency = node.argument.literal.text;
+    } else if (
+      ts.isCallExpression(node) &&
+      (node.expression.kind === ts.SyntaxKind.ImportKeyword ||
+        (ts.isIdentifier(node.expression) &&
+          node.expression.text === "require"))
+    ) {
+      failures.push(`${file}: runtime imports are not allowed in this service`);
+    }
+    if (dependency !== undefined) {
+      const reason = violation(file, dependency);
+      if (reason) failures.push(`${file} -> ${dependency}: ${reason}`);
+    }
+    ts.forEachChild(node, inspect);
+  };
+  inspect(source);
+  return failures;
+}
+
 test("production imports respect context ownership and inward dependencies", () => {
   const failures: string[] = [];
   for (const path of sourceFiles(sourceRoot)) {
     const file = relative(sourceRoot, path).split(sep).join("/");
-    const source = ts.createSourceFile(
-      file,
-      readFileSync(path, "utf8"),
-      ts.ScriptTarget.Latest,
-      true,
-    );
-    const inspect = (node: ts.Node) => {
-      let dependency: string | undefined;
-      if (
-        (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
-        node.moduleSpecifier
-      ) {
-        assert(ts.isStringLiteral(node.moduleSpecifier));
-        dependency = node.moduleSpecifier.text;
-      } else if (
-        ts.isImportTypeNode(node) &&
-        ts.isLiteralTypeNode(node.argument) &&
-        ts.isStringLiteral(node.argument.literal)
-      ) {
-        dependency = node.argument.literal.text;
-      } else if (
-        ts.isCallExpression(node) &&
-        (node.expression.kind === ts.SyntaxKind.ImportKeyword ||
-          (ts.isIdentifier(node.expression) &&
-            node.expression.text === "require"))
-      ) {
-        failures.push(
-          `${file}: runtime imports are not allowed in this service`,
-        );
-      }
-      if (dependency !== undefined) {
-        const reason = violation(file, dependency);
-        if (reason) failures.push(`${file} -> ${dependency}: ${reason}`);
-      }
-      ts.forEachChild(node, inspect);
-    };
-    inspect(source);
+    failures.push(...importViolations(file, readFileSync(path, "utf8")));
   }
   assert.deepEqual(failures, []);
 });
@@ -156,6 +159,18 @@ test("the boundary guard rejects SDK leakage, reversed dependencies, and foreign
       "../durable-object/session",
     ],
     [
+      "memory/infrastructure/persistence/durable-object/unit-of-work.ts",
+      "../sqlite/revision-store",
+    ],
+    [
+      "memory/infrastructure/persistence/durable-object/migrate-memory.ts",
+      "../sqlite/migrations/generated",
+    ],
+    [
+      "memory/infrastructure/persistence/durable-object/session.ts",
+      "../../../domain/memory-revision",
+    ],
+    [
       "memory/infrastructure/persistence/sqlite/migrate-memory.ts",
       "durable-utils/sql-migrations",
     ],
@@ -176,19 +191,57 @@ test("the boundary guard rejects SDK leakage, reversed dependencies, and foreign
   assert.equal(
     violation(
       "memory/infrastructure/persistence/durable-object/unit-of-work.ts",
-      "../sqlite/revision-store",
+      "./revision-store",
     ),
     undefined,
   );
+});
+
+test("infrastructure boundaries include type imports and re-exports", () => {
+  for (const source of [
+    'import { migrations } from "../sqlite/migrations/generated";',
+    'import type { SqlSession } from "../sqlite/session";',
+    'type Session = import("../sqlite/session").SqlSession;',
+    'export { migrations } from "../sqlite/migrations/generated";',
+    'export type { SqlSession } from "../sqlite/session";',
+    'export * from "../sqlite/session";',
+  ]) {
+    assert(
+      importViolations(
+        "memory/infrastructure/persistence/durable-object/x.ts",
+        source,
+      ).length > 0,
+      source,
+    );
+  }
+  for (const dependency of [
+    "./session",
+    "./migrations/generated",
+    "../contract",
+    "../../../outboundport/unit-of-work",
+  ]) {
+    assert.equal(
+      violation(
+        "memory/infrastructure/persistence/durable-object/x.ts",
+        dependency,
+      ),
+      undefined,
+    );
+  }
 });
 
 function responsibilityViolations(file: string, text: string): string[] {
   const failures: string[] = [];
   const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
   const layer = file.split("/")[1];
-  const generatedSql =
-    file === "memory/infrastructure/persistence/sqlite/migrations/generated.ts";
+  const generatedSql = [
+    "memory/infrastructure/persistence/sqlite/migrations/generated.ts",
+    "memory/infrastructure/persistence/durable-object/migrations/generated.ts",
+  ].includes(file);
   const sqlite = file.startsWith("memory/infrastructure/persistence/sqlite/");
+  const persistence =
+    sqlite ||
+    file.startsWith("memory/infrastructure/persistence/durable-object/");
   const inner = [
     "domain",
     "application",
@@ -225,12 +278,12 @@ function responsibilityViolations(file: string, text: string): string[] {
       )
         failures.push("DDL outside versioned migrations");
       if (
-        !sqlite &&
+        !persistence &&
         /\b(?:SELECT\s+.+\s+FROM|INSERT\s+INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM)\b/i.test(
           node.text,
         )
       )
-        failures.push("SQL outside SQLite adapter");
+        failures.push("SQL outside owning persistence adapter");
     }
     if (
       file.startsWith("bootstrap/") &&
@@ -279,7 +332,7 @@ test("source responsibilities exclude native handles, embedded DDL, and bootstra
       "type Value = SqlStorageValue;",
     ],
     [
-      "memory/infrastructure/persistence/durable-object/x.ts",
+      "memory/infrastructure/request-fingerprint.ts",
       "const sql = 'SELECT * FROM state';",
     ],
   ])

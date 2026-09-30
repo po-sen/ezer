@@ -72,13 +72,17 @@ Delivery uses inbound ports, and bootstrap only composes implementations.
 Commands, queries, and detached views belong to inbound ports; domain types must
 not serve as wire contracts. A focused Unit of Work owns transaction demarcation;
 Stores do not begin or commit transactions. Keep versioned SQL pairs under the
-owning context's `infrastructure/persistence/<technology>/migrations/` (currently
-`sqlite`); migrations and their generated bundles belong to the database adapter.
-Keep `persistence/sqlite/` and `persistence/durable-object/` as sibling adapters.
-SQLite owns SQL, row mapping, and its runtime-independent session contract.
-Durable Object owns the native session implementation, transactions, and migration
-execution with its native version ledger. SQLite must not depend on Cloudflare
-types or the Durable Object adapter; handwritten SQL stays inside SQLite.
+owning context's `infrastructure/persistence/<adapter>/migrations/`.
+Keep `persistence/sqlite/` and `persistence/durable-object/` independent. Each owns
+its Stores, SQL, session types, migration pairs, checksums, and generated bundle.
+Do not import or re-export another infrastructure folder's implementation, types,
+or migrations. A folder can use its own files/children and ancestor contracts,
+not sibling branches. Outside infrastructure, depend only on the context's
+outbound ports; bootstrap selects and composes implementations. Do not bypass
+these boundaries with parent re-export barrels or injected sibling implementations.
+Durable Object owns its native transactions and migration ledger. SQLite must not
+depend on Cloudflare types. Shared port contracts do not imply shared SQL history;
+do not synchronize migrations between adapters. SQL stays in its owning adapter.
 Never embed handwritten DDL in TypeScript. Review SQL and checksum changes before regenerating the bundle.
 Released migration files and pins are immutable. See the memory context README
 for explicit Cloudflare lifecycle and forward-only recovery adaptations. Add

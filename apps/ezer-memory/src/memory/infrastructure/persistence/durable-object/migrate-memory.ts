@@ -2,8 +2,8 @@ import {
   SQLSchemaMigrations,
   type SQLSchemaMigration,
 } from "durable-utils/sql-migrations";
-import { assertSupportedSchema } from "../sqlite/assert-supported-schema";
-import { migrations } from "../sqlite/migrations/generated";
+import { assertSupportedSchema } from "./assert-supported-schema";
+import { migrations } from "./migrations/generated";
 import { createSqlSession } from "./session";
 const ledgerKey = "memory:schema-version";
 

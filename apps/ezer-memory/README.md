@@ -50,13 +50,18 @@ validation. Commands, queries, and detached views belong to `inboundport/`;
 revision invariants belong to `domain/`; application services coordinate one
 `UnitOfWork` with focused state, revision, and operation Stores.
 
-Persistence has two sibling adapters under `memory/infrastructure/persistence/`:
+Persistence has two independent folders under `memory/infrastructure/persistence/`:
 
-- `sqlite/` owns SQL, row mapping, identity initialization statements, and versioned
-  migration artifacts. Its session contract uses no Cloudflare types.
-- `durable-object/` implements that session using Cloudflare storage, owns
-  transaction demarcation and initialization transactions, and runs migrations with
-  the native KV version ledger. It depends on SQLite; SQLite does not depend on it.
+- `sqlite/` owns its SQL Stores, session contract, identity statements, and migration
+  artifacts without Cloudflare types. These components are not a separately
+  deployable SQLite service; a standalone driver and lifecycle are not configured.
+- `durable-object/` owns its own Stores, session, SQL, migration artifacts, native
+  transactions, and KV migration ledger. The Worker selects this implementation.
+
+Neither folder imports the other, including types or migrations. Infrastructure
+depends on its own files and ancestor contracts, and implements the context's
+outbound ports. Bootstrap selects implementations. Similar SQL is maintained
+independently; sharing a database engine does not couple their migration histories.
 
 Each Store uses a scoped SQL session and cannot begin or commit transactions.
 Infrastructure normalizes SQL failures; application maps them to use-case failures;
@@ -148,9 +153,10 @@ with the `EZER_MEMORY` binding. The pinned Wrangler supports this configuration;
 it must not be combined with the legacy `migrations` array. This declaration does
 not provision anything until a separately authorized deployment.
 
-Versioned SQL pairs live in `src/memory/infrastructure/persistence/sqlite/migrations/`.
-The runner lives in the sibling `durable-object/` adapter and consumes these SQL
-artifacts. `durable-utils@0.3.7`, recommended in Cloudflare's migration documentation, owns
+Each adapter owns versioned SQL pairs, checksum pins, and a generated bundle in
+its own `migrations/` directory. The active Worker's runner reads only
+`src/memory/infrastructure/persistence/durable-object/migrations/`.
+`durable-utils@0.3.7`, recommended in Cloudflare's migration documentation, owns
 SQL execution and the atomic native KV version ledger. The runner is not patched.
 Before serving requests, the object initializes that runner inside
 `blockConcurrencyWhile()`, then separately initializes/checks its bound identity.
@@ -161,10 +167,12 @@ pnpm --filter @ezer/memory migrations:generate
 pnpm --filter @ezer/memory migrations:check
 ```
 
-The first command packages reviewed SQL into generated TypeScript and records
-SHA-256 pins. The second rejects missing pairs, version gaps, changed bytes, and a
-stale bundle. CI only checks; it does not regenerate or silently accept changed
-SQL. The generated module is build output committed for bundling, not handwritten
+The first command packages each adapter's reviewed SQL independently into generated
+TypeScript and records its SHA-256 pins. The second checks each history for missing
+pairs, version gaps, changed bytes, and a stale bundle. Neither command copies or
+synchronizes one adapter's migrations into another. CI only checks; it does not
+regenerate or silently accept changed SQL. Generated modules are build output
+committed for bundling, not handwritten
 DDL. Normal development and build commands validate it before starting. Once a
 baseline is released, its files and checksum pins are immutable; append the next
 continuous pair for every correction.
@@ -194,6 +202,10 @@ rollback by forcing operation-receipt insertion to fail after revision insertion
 and verify persistence by evicting an object and reconnecting to its existing ID.
 This demonstrates storage recovery within the local Workers runtime, not a cloud
 deployment, a full host restart, or cross-computer/native-agent continuity.
+The SQLite component test clears its disposable fixture and independently applies
+the SQLite folder's migrations and Stores through a test-only session. This covers
+those components on the test runtime's SQLite engine, not a standalone Node.js or
+other SQLite driver deployment.
 
 Official references: [SQLite storage and transactions](https://developers.cloudflare.com/durable-objects/api/sqlite-storage-api/),
 [class exports](https://developers.cloudflare.com/durable-objects/reference/durable-objects-migrations/),

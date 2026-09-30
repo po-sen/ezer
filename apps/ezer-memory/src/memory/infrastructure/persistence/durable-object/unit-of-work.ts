@@ -1,8 +1,8 @@
 import { PersistenceFault } from "../../../outboundport/persistence-fault";
 import type { UnitOfWork } from "../../../outboundport/unit-of-work";
-import { createIndividualStateStore } from "../sqlite/individual-state-store";
-import { createOperationStore } from "../sqlite/operation-store";
-import { createRevisionStore } from "../sqlite/revision-store";
+import { createIndividualStateStore } from "./individual-state-store";
+import { createOperationStore } from "./operation-store";
+import { createRevisionStore } from "./revision-store";
 import { createSqlSession } from "./session";
 export function createDurableObjectUnitOfWork(
   storage: DurableObjectStorage,

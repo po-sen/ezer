@@ -1,5 +1,13 @@
 import { PersistenceFault } from "../../../outboundport/persistence-fault";
-import type { SqlSession, SqlValue } from "../sqlite/session";
+
+export type SqlValue = SqlStorageValue;
+
+export interface SqlSession {
+  query<T extends Record<string, SqlValue>>(
+    sql: string,
+    ...bindings: SqlValue[]
+  ): T[];
+}
 
 export function createSqlSession(
   sql: SqlStorage,

@@ -44,13 +44,24 @@ runs inside the transaction. Nested transactions are rejected.
 
 ## Persistence ownership and context separation
 
-SQLite SQL, row mapping, migration pairs, checksum pins, and the generated SQL
-bundle belong to `infrastructure/persistence/sqlite/`. The sibling
-`infrastructure/persistence/durable-object/` owns Cloudflare storage access,
-transactions, and the migration runner with its native KV ledger. SQLite defines
-a runtime-independent SQL session contract; Durable Object implements it and
-supplies it to the SQLite Stores. SQLite imports no Cloudflare types or Durable
-Object implementation, and the Durable Object adapter contains no handwritten SQL.
+`infrastructure/persistence/sqlite/` and
+`infrastructure/persistence/durable-object/` independently own their Stores, SQL,
+session types, initialization, and migration artifacts. Durable Object also owns
+Cloudflare storage access, transactions, and its native KV migration ledger.
+Neither adapter imports the other's code, types, or migration bundle. Each folder
+can use its own files/children and ancestor contracts; sibling infrastructure
+branches are forbidden. Outside infrastructure, adapters implement the context's
+outbound ports. Shared ports do not imply shared persistence implementations.
+Parent re-export barrels and injected sibling implementations must not bypass this
+rule. Architecture checks cover ordinary imports, type imports, and re-exports.
+Migration packaging checks both histories separately and never synchronizes them.
+The initial SQL bytes are identical to preserve the existing Durable Object data
+format and ledger, but each adapter can evolve its own history independently.
+
+The Worker selects Durable Object. SQLite retains runtime-independent components
+and its own migration artifacts; a standalone driver, migration lifecycle, and
+service deployment are not configured. The SQLite component test uses a disposable
+database and a test-only session, not the production Durable Object adapter.
 Bootstrap owns the thin class entry point, lifecycle wiring, and composition;
 delivery owns RPC validation and delegation to inbound ports.
 
@@ -99,8 +110,8 @@ honor the reference mechanism directly. Their scope is limited to this adapter.
    no shared PostgreSQL connection for a central migration command. Cloudflare
    recommends `blockConcurrencyWhile()` during construction. Bootstrap delegates
    migration and identity initialization to the Durable Object adapter before
-   requests execute. That adapter owns transactions and consumes SQLite statements
-   and migration artifacts. Bootstrap contains no SQL, business branching, or retry policy.
+   requests execute. That adapter owns its transactions, SQL, and migration
+   artifacts. Bootstrap contains no SQL, business branching, or retry policy.
 2. **Native KV ledger instead of PostgreSQL migration tables.** The pinned
    `durable-utils` runner owns the atomic version ledger. SQLite schemas, advisory
    locks, and golang-migrate's dirty flag are not emulated. A failed batch preserves
