@@ -19,7 +19,9 @@ function violation(file: string, dependency: string): string | undefined {
   const [context, layer] = file.split("/");
   if (context === "bootstrap") return;
   if (file === "index.ts") {
-    return dependency === "./bootstrap/worker"
+    return ["./bootstrap/worker", "./bootstrap/ezer-memory"].includes(
+      dependency,
+    )
       ? undefined
       : "entry point must delegate to bootstrap";
   }
@@ -117,6 +119,12 @@ test("the boundary guard rejects SDK leakage, reversed dependencies, and foreign
     ["memory/inboundport/recall.ts", "cloudflare:workers"],
     ["memory/application/recall.ts", "../../identity/domain/owner"],
     ["memory/application/recall.ts", "@/memory/infrastructure/sqlite"],
+    ["memory/domain/memory.ts", "../infrastructure/sqlite-memory-store"],
+    [
+      "memory/infrastructure/sqlite-memory-store.ts",
+      "../application/commit-memory",
+    ],
+    ["index.ts", "./memory/infrastructure/sqlite-memory-store"],
   ] as const) {
     assert(
       violation(file, dependency),

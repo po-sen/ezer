@@ -14,9 +14,10 @@ is not yet available.
 ## Development
 
 The memory service uses TypeScript and targets Cloudflare Workers. The
-repository includes its initial MCP service foundation and development tooling.
-Memory persistence and authentication are not implemented yet. Installing the
-plugin will not require these development dependencies.
+repository includes its MCP service foundation, an internal SQLite-backed Durable
+Object memory core, and development tooling. Public memory tools and
+authentication are not implemented yet. Installing the plugin will not require
+these development dependencies.
 
 Use Node.js 24 or later and pnpm 12.6.0, pinned in the root `packageManager`
 field. Install that pnpm version using the [official installation guide](https://pnpm.io/installation).
@@ -120,6 +121,12 @@ replace review.
 The [`ezer-memory` service](apps/ezer-memory/README.md) exposes `/health` and
 an HTTP MCP endpoint at `/mcp`. Its only tool is `ezer_service_info`, which reports
 the current foundation's capabilities without reading or writing memory.
+
+The internal `EZER_MEMORY` binding supports sourced text memories, immutable
+revisions, atomic writes, and idempotent retries in isolated Durable Objects.
+Local tests cover concurrent corrections, rollback, and recovery after object
+eviction. This binding is not reachable through public HTTP or MCP; authentication
+and authorization must precede exposing private memories to host agents.
 
 ```sh
 pnpm --filter @ezer/memory dev

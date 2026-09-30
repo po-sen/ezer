@@ -3,8 +3,9 @@
 ## Scope and working agreements
 
 Ezer is an early-stage plugin project using Agent Skills and MCP. The planned
-memory service uses TypeScript on Cloudflare Workers. Its current foundation
-exposes service information; persistence and authentication are not implemented.
+memory service uses TypeScript on Cloudflare Workers. Its public MCP endpoint
+exposes service information. An internal SQLite-backed Durable Object implements
+memory persistence; authentication and public memory tools are not implemented.
 Keep product behavior portable across compatible host agents.
 These instructions guide repository development, not Ezer's runtime personality.
 
@@ -44,7 +45,9 @@ The full check does not include untracked drafts. It checks tracked working-tree
 formatting, then runs service type checks, architecture and Worker tests, and a
 local bundle build. Use the staged check to validate partially staged formatting.
 Service commands are available with `pnpm --filter @ezer/memory run <command>`:
-`types`, `types:check`, `typecheck`, `test`, `build`, and `dev`.
+`types`, `types:check`, `typecheck`, `test`, `build`, and `dev`. Persistence tests
+use synthetic data through the internal `EZER_MEMORY` binding. Keep that binding
+off public HTTP/MCP routes until authentication and individual authorization exist.
 Worker declarations are generated with `wrangler types`; commit the output after
 configuration, export, or Wrangler changes. Never hand-edit or format
 `apps/ezer-memory/worker-configuration.d.ts`. The full check rejects stale types
