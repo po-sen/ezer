@@ -3,8 +3,9 @@
 ## Scope and working agreements
 
 Ezer is an early-stage plugin project using Agent Skills and MCP. The planned
-memory service uses TypeScript on Cloudflare Workers. Its current foundation
-exposes service information; persistence and authentication are not implemented.
+memory service uses TypeScript on Cloudflare Workers. Its public MCP endpoint
+exposes service information. An internal SQLite-backed Durable Object implements
+memory persistence; authentication and public memory tools are not implemented.
 Keep product behavior portable across compatible host agents.
 These instructions guide repository development, not Ezer's runtime personality.
 
@@ -44,7 +45,12 @@ The full check does not include untracked drafts. It checks tracked working-tree
 formatting, then runs service type checks, architecture and Worker tests, and a
 local bundle build. Use the staged check to validate partially staged formatting.
 Service commands are available with `pnpm --filter @ezer/memory run <command>`:
-`types`, `types:check`, `typecheck`, `test`, `build`, and `dev`.
+`types`, `types:check`, `typecheck`, `test`, `build`, `dev`,
+`migrations:generate`, `migrations:check`, `migrate:sqlite`,
+`migrate:postgresql`, and `test:postgresql`. The full check requires the dedicated
+PostgreSQL test service described in the service README. Persistence tests
+use synthetic data through the internal `EZER_MEMORY` binding. Keep that binding
+off public HTTP/MCP routes until authentication and individual authorization exist.
 Worker declarations are generated with `wrangler types`; commit the output after
 configuration, export, or Wrangler changes. Never hand-edit or format
 `apps/ezer-memory/worker-configuration.d.ts`. The full check rejects stale types
@@ -62,25 +68,93 @@ Put deployable applications in `apps/` and plugin artifacts in `plugins/`. Add
 shared `packages/` only for actual reuse, with explicit exports and `workspace:`
 dependencies. Do not split DDD layers into workspace packages by default.
 
-Organize service code by bounded context. Keep domain models pure and place use
+Put runtime and operational entrypoints in `src/entrypoints/`. Bootstrap contains
+composition factories; Cloudflare lifecycle and RPC delegation stay in entrypoints.
+For now, these directories must have equal TypeScript file counts and pair
+one-to-one: each entrypoint imports exactly one bootstrap module, and each bootstrap
+module belongs to exactly one entrypoint. Both directories stay flat and use named
+implementation files, without indexes or per-command subdirectories. The Worker
+HTTP handler and Durable Object class share `entrypoints/worker.ts`; their composition
+shares `bootstrap/create-worker.ts`. Each migration CLI has its own entrypoint and
+composition file. Never aggregate Node CLI entrypoints into the Worker entrypoint.
+Keep the Node migration CLIs separate from the Worker dependency graph. Worker
+and CLI have separate TypeScript configurations; use explicit `.ts` extensions
+for repository source imports so Node can execute the CLI without a custom loader.
+Keep build-time SQL packaging in `scripts/`.
+
+Every source module directory except bootstrap and entrypoints has an `index.ts`
+that explicitly exposes its public API. Cross-directory imports, type imports,
+and re-exports of repository TypeScript must target `index.ts`, except references
+to the flat, named bootstrap and entrypoint files. All use an explicit `.ts`
+extension. Bootstrap must still consume the public indexes of context modules.
+Within a directory, import
+implementation files directly; never import the directory's own index back into
+its implementations. External packages, platform modules, JSON metadata, and
+official generated declarations retain their native import conventions. Tests and
+development scripts obey the same import rule but need no barrel unless they expose
+a reusable module. File-discovered migration resources do not need an index.
+
+Every `index.ts` is a pure barrel containing only explicit re-export declarations
+(`export { ... } from` or `export type ... from`). Never put imports, local
+declarations, functions, classes, initialization, or other executable statements in
+an index. This applies repository-wide, without bootstrap or entrypoint exceptions.
+Indexes do not relax architecture boundaries: validate the original declaration
+behind aliases, namespace imports, and re-exports. Context grouping indexes expose
+public inbound contracts; the persistence grouping index exposes adapter namespaces
+as types only. Runtime composition imports the selected adapter's index directly.
+SQLite's portable Stores and Node-only `sqlite/cli/` have separate indexes so Worker
+imports cannot pull in Node SQLite or migration packages.
+
+Organize service code by bounded context under `src/modules/`, with `ports/inbound/`
+and `ports/outbound/`. Keep domain models pure and place use
 cases behind inbound ports; external effects belong behind outbound ports.
-Delivery uses inbound ports, and bootstrap only composes implementations. Add
-layers when they have real responsibilities, not as empty scaffolding. Extend
+Delivery uses inbound ports, and bootstrap only composes implementations.
+Commands, queries, and detached views belong to inbound ports; domain types must
+not serve as wire contracts. A focused Unit of Work owns transaction demarcation;
+Stores do not begin or commit transactions. Keep versioned SQL pairs under the
+owning context's `infrastructure/persistence/<adapter>/migrations/`.
+Keep `persistence/sqlite/` and `persistence/durable-object/` independent. Each owns
+its SQL, session types, migration artifacts, and checksums. PostgreSQL owns a
+third independent migration adapter; its memory Stores are not implemented.
+Do not import or re-export a sibling infrastructure folder's implementation, types,
+or migrations, including indirectly through an ancestor index. A folder can use its own files/children and ancestor contracts,
+not sibling branches. Outside infrastructure, depend only on the context's
+outbound ports; bootstrap selects and composes implementations. Do not bypass
+these boundaries with parent re-export barrels or injected sibling implementations.
+Durable Object owns its native transactions and migration ledger. SQLite must not
+depend on Cloudflare types. Its standalone migration driver uses Node SQLite.
+Shared port contracts do not imply shared SQL history;
+do not synchronize migrations between adapters. SQL stays in its owning adapter.
+Never embed handwritten DDL in TypeScript. Review SQL and checksum changes before regenerating the bundle.
+Released migration files and pins are immutable. See the memory context README
+for backend-specific lifecycle, file naming, and forward-only recovery.
+SQLite uses Postgrator do/undo SQL pairs; PostgreSQL uses node-pg-migrate up/down
+pairs and its native migration API. DO retains its original SQL format and ledger.
+Operational CLIs expose only `status` and `up`; do not add implicit downgrade,
+repair, force, or cross-context transactions. Status must not create schema.
+PostgreSQL migrations run with an adapter-owned advisory lock; ordinary migrations
+commit individually. SQLite locks before reading history and commits pending SQL
+and its ledger together. Never print connection details, SQL, raw provider errors,
+or private data from operational commands. Add layers when they have real responsibilities, not as empty scaffolding. Extend
 architecture checks when introducing a new context or allowed dependency.
 
-## TypeScript public functions
+## TypeScript exports
 
-Each repository-owned TypeScript module may expose at most one public function.
-Public means a callable runtime export, including named/default functions,
-function-valued variables, and re-exported functions. Count exported names, not
-overload signatures. Keep additional helpers private to the module or move
-independent public functions into separate files.
+Each repository-owned TypeScript module may expose at most one exported name.
+Count functions, types, interfaces, classes, constants, default exports, and
+re-exported names, including names exposed through `export *`. A single statement
+such as `export { A, B }` still exports two names. Overloads of one exported name
+count once. Zero exports are allowed. Private helpers and object/class members
+do not count as module exports. Keep implementation-only types private; split
+independently consumed exports into separate implementation modules.
 
-Unexported helpers, nested callbacks, type-only exports, and interface method
-signatures do not count. Files containing only types, configuration, or a Worker
-handler object may have no exported function. This convention concerns module
-exports, not methods belonging to an object or class. Apply it to application
-code, tests, and development scripts, and check it during diff review.
+Any `index.ts` may expose multiple names. `apps/ezer-memory/src/bootstrap/` and
+`apps/ezer-memory/src/entrypoints/` also allow multiple exports, subject to their
+one-to-one pairing rule. The official generated
+`apps/ezer-memory/worker-configuration.d.ts` is also excluded. Other generated
+TypeScript, including migration bundles, is not exempt. This rule applies to all
+tracked TypeScript files, including tests, configuration, and root development
+scripts. The repository-wide export test enforces these exact exceptions.
 
 ## GitHub account
 

@@ -1,0 +1,10 @@
+export { assertSupportedSchema } from "./assert-supported-schema.ts";
+export { createSqlSession } from "./create-sql-session.ts";
+export { createIndividualStateStore } from "./individual-state-store.ts";
+export { initializeIndividual } from "./initialize-individual.ts";
+export { migrateMemory } from "./migrate-memory.ts";
+export { createOperationStore } from "./operation-store.ts";
+export { createRevisionStore } from "./revision-store.ts";
+export type { SqlSession } from "./session.ts";
+export type { SqlValue } from "./sql-value.ts";
+export { createDurableObjectUnitOfWork } from "./unit-of-work.ts";

@@ -1,1 +1,1 @@
-export { worker as default } from "./bootstrap/worker";
+export { default, EzerMemory } from "./entrypoints/worker.ts";
