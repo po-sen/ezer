@@ -18,7 +18,7 @@
     "migrations:check": "node scripts/generate-migrations.ts",
     "migrate:sqlite": "node src/entrypoints/migrate-sqlite.ts",
     "migrate:postgresql": "node src/entrypoints/migrate-postgresql.ts",
-    "test:postgresql": "node --test tests/postgresql-migrations.test.ts"
+    "test:postgresql": "node scripts/test-postgresql.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.1.0",

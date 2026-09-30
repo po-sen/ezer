@@ -321,13 +321,19 @@ never point this port at retained data. GitHub Actions provisions this service.
 For local testing, verify your Docker target before creating a dedicated container:
 
 ```sh
-docker run -d --name ezer-migration-tests --mount type=tmpfs,destination=/var/lib/postgresql/data -p 127.0.0.1:55439:5432 -e POSTGRES_HOST_AUTH_METHOD=trust -e POSTGRES_USER=ezer_test -e POSTGRES_DB=ezer_test postgres:16-alpine
+docker run -d --name ezer-migration-tests --mount type=tmpfs,destination=/var/lib/postgresql -p 127.0.0.1:55439:5432 -e POSTGRES_HOST_AUTH_METHOD=trust -e POSTGRES_USER=ezer_test -e POSTGRES_DB=ezer_test postgres:18.6-alpine
 pnpm run check
 docker rm -f ezer-migration-tests
 ```
 
-Passwordless access is limited to the disposable loopback test service. The tests
-use fixed synthetic connection settings and do not inherit host PG credentials.
+Local and CI tests use PostgreSQL 18.6. PostgreSQL 18+ images require the tmpfs
+mount at `/var/lib/postgresql` to cover their version-specific data directory.
+Passwordless access is limited to the disposable loopback test service. The test
+command starts the whole suite with an explicit environment allowlist, a temporary
+home, and an unused password-file path. It never copies host PG or Node settings.
+CLI subprocesses use the same isolation. Use `test:postgresql` rather than invoking
+the PostgreSQL test files directly. Fixtures register cleanup before connecting;
+partial initialization and cleanup failures still attempt all acquired resources.
 All test data is disposable; the test container must be removed when finished.
 
 ## Next capabilities

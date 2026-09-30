@@ -1,19 +1,11 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { createHash, randomUUID } from "node:crypto";
-import {
-  cpSync,
-  mkdtempSync,
-  readFileSync,
-  readdirSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
+import { createHash } from "node:crypto";
+import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { test, type TestContext } from "node:test";
+import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import pg from "pg";
+import { runIsolatedNode } from "../scripts/index.ts";
+import { createFixture } from "./postgresql/index.ts";
 import {
   inspectMigrations,
   migrateMemory,
@@ -21,41 +13,6 @@ import {
 } from "../src/modules/memory/infrastructure/persistence/postgresql/index.ts";
 
 const appRoot = fileURLToPath(new URL("../", import.meta.url));
-// Dedicated disposable local/CI service; never use a developer's PG environment.
-const connection = {
-  host: "127.0.0.1",
-  port: 55439,
-  user: "ezer_test",
-  password: "",
-  database: "ezer_test",
-  connectionTimeoutMillis: 3000,
-};
-
-async function fixture(t: TestContext) {
-  const database = `ezer_migration_${randomUUID().replaceAll("-", "")}`;
-  const admin = new pg.Client(connection);
-  await admin.connect();
-  await admin.query(`CREATE DATABASE ${database}`);
-  const client = new pg.Client({ ...connection, database });
-  await client.connect();
-  const directory = mkdtempSync(join(tmpdir(), "ezer-pg-migration-"));
-  cpSync(
-    join(
-      appRoot,
-      "src/modules/memory/infrastructure/persistence/postgresql/migrations",
-    ),
-    directory,
-    { recursive: true },
-  );
-  t.after(async () => {
-    await client.end();
-    await admin.query(`DROP DATABASE ${database}`);
-    await admin.end();
-    rmSync(directory, { recursive: true });
-  });
-  return { client, database, directory };
-}
-
 function pin(directory: string) {
   const files = readdirSync(directory)
     .filter((file) => file.endsWith(".sql") || file.endsWith(".ts"))
@@ -76,24 +33,22 @@ function pin(directory: string) {
 }
 
 test("PostgreSQL CLI upgrades only memory and status never creates a schema", async (t) => {
-  const { client, database } = await fixture(t);
+  const { client, database } = await createFixture((cleanup) =>
+    t.after(cleanup),
+  );
   const run = (action: string) =>
-    spawnSync(
-      process.execPath,
-      [
-        join(appRoot, "src/entrypoints/migrate-postgresql.ts"),
-        action,
-        "--database",
-        database,
-        "--host",
-        "127.0.0.1",
-        "--port",
-        "55439",
-        "--user",
-        "ezer_test",
-      ],
-      { encoding: "utf8", env: { PATH: "/usr/bin:/bin" }, timeout: 15000 },
-    );
+    runIsolatedNode([
+      join(appRoot, "src/entrypoints/migrate-postgresql.ts"),
+      action,
+      "--database",
+      database,
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "55439",
+      "--user",
+      "ezer_test",
+    ]);
   const status = run("status");
   assert.equal(status.status, 0, status.stderr);
   assert.equal(JSON.parse(status.stdout).pending, 1);
@@ -131,7 +86,9 @@ test("PostgreSQL CLI upgrades only memory and status never creates a schema", as
 });
 
 test("PostgreSQL failed migration rolls back its SQL and ledger while preserving earlier versions", async (t) => {
-  const { client, directory } = await fixture(t);
+  const { client, directory } = await createFixture((cleanup) =>
+    t.after(cleanup),
+  );
   await migrateMemory(client, readMigrationPlan(directory));
   await client.query(
     "INSERT INTO memory.state VALUES (1, 'synthetic-owner', 0)",
@@ -180,34 +137,33 @@ test("PostgreSQL failed migration rolls back its SQL and ledger while preserving
 });
 
 test("PostgreSQL migration lock prevents a concurrent runner and is released afterward", async (t) => {
-  const { client, database, directory } = await fixture(t);
-  const other = new pg.Client({ ...connection, database });
-  await other.connect();
-  try {
-    await other.query("SELECT pg_advisory_lock(1770131713)");
-    await assert.rejects(
-      migrateMemory(client, readMigrationPlan(directory)),
-      /already running/,
-    );
-    assert.equal(
-      (await client.query("SELECT to_regnamespace('memory') AS schema")).rows[0]
-        .schema,
-      null,
-    );
-    await other.query("SELECT pg_advisory_unlock(1770131713)");
-    await migrateMemory(client, readMigrationPlan(directory));
-    assert.equal(
-      (await other.query("SELECT pg_try_advisory_lock(1770131713) AS acquired"))
-        .rows[0].acquired,
-      true,
-    );
-  } finally {
-    await other.end();
-  }
+  const { client, database, directory, connect } = await createFixture(
+    (cleanup) => t.after(cleanup),
+  );
+  const other = await connect(database);
+  await other.query("SELECT pg_advisory_lock(1770131713)");
+  await assert.rejects(
+    migrateMemory(client, readMigrationPlan(directory)),
+    /already running/,
+  );
+  assert.equal(
+    (await client.query("SELECT to_regnamespace('memory') AS schema")).rows[0]
+      .schema,
+    null,
+  );
+  await other.query("SELECT pg_advisory_unlock(1770131713)");
+  await migrateMemory(client, readMigrationPlan(directory));
+  assert.equal(
+    (await other.query("SELECT pg_try_advisory_lock(1770131713) AS acquired"))
+      .rows[0].acquired,
+    true,
+  );
 });
 
 test("PostgreSQL supports the library's explicit per-migration transaction opt-out", async (t) => {
-  const { client, directory } = await fixture(t);
+  const { client, directory } = await createFixture((cleanup) =>
+    t.after(cleanup),
+  );
   await migrateMemory(client, readMigrationPlan(directory));
   writeFileSync(
     join(directory, "000002_concurrent_index.ts"),
