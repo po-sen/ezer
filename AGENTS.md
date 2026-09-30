@@ -70,6 +70,10 @@ dependencies. Do not split DDD layers into workspace packages by default.
 
 Put runtime and operational entrypoints in `src/entrypoints/`. Bootstrap contains
 composition factories; Cloudflare lifecycle and RPC delegation stay in entrypoints.
+For now, these directories must have equal TypeScript file counts and pair
+one-to-one: each entrypoint imports exactly one bootstrap module, and each bootstrap
+module belongs to exactly one entrypoint. The Worker HTTP handler and Durable Object
+class share `entrypoints/worker.ts`; their composition shares `bootstrap/create-worker.ts`.
 Keep the Node migration CLIs separate from the Worker dependency graph. Worker
 and CLI have separate TypeScript configurations; use explicit `.ts` extensions
 for repository source imports so Node can execute the CLI without a custom loader.
@@ -108,19 +112,22 @@ and its ledger together. Never print connection details, SQL, raw provider error
 or private data from operational commands. Add layers when they have real responsibilities, not as empty scaffolding. Extend
 architecture checks when introducing a new context or allowed dependency.
 
-## TypeScript public functions
+## TypeScript exports
 
-Each repository-owned TypeScript module may expose at most one public function.
-Public means a callable runtime export, including named/default functions,
-function-valued variables, and re-exported functions. Count exported names, not
-overload signatures. Keep additional helpers private to the module or move
-independent public functions into separate files.
+Each repository-owned TypeScript module may expose at most one exported name.
+Count functions, types, interfaces, classes, constants, default exports, and
+re-exported names, including names exposed through `export *`. A single statement
+such as `export { A, B }` still exports two names. Overloads of one exported name
+count once. Zero exports are allowed. Private helpers and object/class members
+do not count as module exports. Keep implementation-only types private; split
+independently consumed exports into separate modules instead of adding barrels.
 
-Unexported helpers, nested callbacks, type-only exports, and interface method
-signatures do not count. Files containing only types, configuration, or a Worker
-handler object may have no exported function. This convention concerns module
-exports, not methods belonging to an object or class. Apply it to application
-code, tests, and development scripts, and check it during diff review.
+`apps/ezer-memory/src/bootstrap/` and `apps/ezer-memory/src/entrypoints/` may expose
+multiple names, subject to their one-to-one pairing rule. The official generated
+`apps/ezer-memory/worker-configuration.d.ts` is also excluded. Other generated
+TypeScript, including migration bundles, is not exempt. This rule applies to all
+tracked TypeScript files, including tests, configuration, and root development
+scripts. The repository-wide export test enforces these exact exceptions.
 
 ## GitHub account
 

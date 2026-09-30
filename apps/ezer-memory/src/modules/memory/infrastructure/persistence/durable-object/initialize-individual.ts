@@ -1,4 +1,4 @@
-import { createSqlSession } from "./session.ts";
+import { createSqlSession } from "./create-sql-session.ts";
 
 export function initializeIndividual(
   storage: DurableObjectStorage,

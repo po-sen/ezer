@@ -6,9 +6,3 @@ export const migrations = [
     "sql": "CREATE TABLE state (\n  singleton INTEGER PRIMARY KEY CHECK (singleton = 1),\n  individual_id TEXT NOT NULL,\n  change_sequence INTEGER NOT NULL CHECK (change_sequence >= 0 AND change_sequence <= 9007199254740991)\n);\nCREATE TABLE revisions (\n  memory_id TEXT NOT NULL,\n  revision INTEGER NOT NULL CHECK (revision > 0 AND revision <= 9007199254740991),\n  body TEXT NOT NULL,\n  source_reference TEXT NOT NULL,\n  source_excerpt TEXT NOT NULL,\n  reason TEXT,\n  recorded_at TEXT NOT NULL,\n  change_sequence INTEGER NOT NULL UNIQUE CHECK (change_sequence > 0 AND change_sequence <= 9007199254740991),\n  PRIMARY KEY (memory_id, revision),\n  CHECK ((revision = 1 AND reason IS NULL) OR (revision > 1 AND reason IS NOT NULL))\n);\nCREATE TABLE operations (\n  operation_id TEXT PRIMARY KEY NOT NULL,\n  fingerprint TEXT NOT NULL,\n  memory_id TEXT NOT NULL,\n  revision INTEGER NOT NULL,\n  FOREIGN KEY (memory_id, revision) REFERENCES revisions(memory_id, revision)\n);\n"
   }
 ] as const;
-export const reversals = [
-  {
-    "idMonotonicInc": 1,
-    "sql": "-- Destructive baseline reversal. Recovery requires a separately verified backup.\n-- Never executed by the Worker or an RPC endpoint.\nDROP TABLE operations;\nDROP TABLE revisions;\nDROP TABLE state;\n"
-  }
-] as const;

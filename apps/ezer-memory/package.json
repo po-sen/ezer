@@ -11,7 +11,7 @@
     "types": "wrangler types",
     "types:check": "wrangler types --check",
     "typecheck": "pnpm run types && tsc --noEmit && tsc --noEmit -p tsconfig.cli.json && tsc --noEmit -p tests/tsconfig.json",
-    "test": "node --test tests/architecture.test.ts tests/migration-cli.test.ts && vitest run",
+    "test": "node --test tests/architecture.test.ts tests/typescript-exports.test.ts tests/migration-cli.test.ts && vitest run",
     "build": "pnpm run migrations:check && wrangler deploy --dry-run --outdir dist && node scripts/check-worker-bundle.ts",
     "check": "pnpm run migrations:check && pnpm run types:check && pnpm run typecheck && pnpm test && pnpm run test:postgresql && pnpm run build",
     "migrations:generate": "node scripts/generate-migrations.ts --write",

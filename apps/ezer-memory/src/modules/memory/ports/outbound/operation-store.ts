@@ -1,4 +1,4 @@
-export interface RecordedOperation {
+interface RecordedOperation {
   readonly fingerprint: string;
   readonly memoryId: string;
   readonly revision: number;

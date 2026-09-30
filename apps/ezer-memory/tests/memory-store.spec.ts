@@ -1,7 +1,7 @@
 import { env, exports } from "cloudflare:workers";
 import { evictDurableObject, runInDurableObject } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-import type { MemoryWrite } from "../src/modules/memory/ports/inbound/commit-memory.ts";
+import type { MemoryWrite } from "../src/modules/memory/ports/inbound/memory-write.ts";
 import { migrateMemory } from "../src/modules/memory/infrastructure/persistence/durable-object/migrate-memory.ts";
 import { initializeIndividual } from "../src/modules/memory/infrastructure/persistence/durable-object/initialize-individual.ts";
 

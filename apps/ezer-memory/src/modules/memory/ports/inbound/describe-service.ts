@@ -1,4 +1,4 @@
-export interface MemoryServiceDescription {
+interface MemoryServiceDescription {
   readonly name: "ezer-memory";
   readonly version: string;
   readonly stage: "foundation";

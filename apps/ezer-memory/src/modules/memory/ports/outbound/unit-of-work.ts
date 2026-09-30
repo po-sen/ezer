@@ -1,11 +1,4 @@
-import type { IndividualStateStore } from "./individual-state-store.ts";
-import type { OperationStore } from "./operation-store.ts";
-import type { RevisionStore } from "./revision-store.ts";
-export interface MemoryStores {
-  readonly state: IndividualStateStore;
-  readonly revisions: RevisionStore;
-  readonly operations: OperationStore;
-}
+import type { MemoryStores } from "./memory-stores.ts";
 export interface UnitOfWork {
   // Only scoped capabilities cross this boundary; never a native transaction.
   // Work must complete synchronously. Adapters reject async callbacks and expired scopes.

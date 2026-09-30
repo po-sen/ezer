@@ -3,7 +3,7 @@ import type { UnitOfWork } from "../../../ports/outbound/unit-of-work.ts";
 import { createIndividualStateStore } from "./individual-state-store.ts";
 import { createOperationStore } from "./operation-store.ts";
 import { createRevisionStore } from "./revision-store.ts";
-import { createSqlSession } from "./session.ts";
+import { createSqlSession } from "./create-sql-session.ts";
 export function createDurableObjectUnitOfWork(
   storage: DurableObjectStorage,
 ): UnitOfWork {

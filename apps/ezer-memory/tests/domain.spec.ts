@@ -1,9 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { MemoryFault } from "../src/modules/memory/domain/memory-fault.ts";
-import {
-  transitionMemory,
-  type RevisionIntent,
-} from "../src/modules/memory/domain/transition-memory.ts";
+import { transitionMemory } from "../src/modules/memory/domain/transition-memory.ts";
+import { type RevisionIntent } from "../src/modules/memory/domain/revision-intent.ts";
 
 const content = {
   memoryId: "m1",

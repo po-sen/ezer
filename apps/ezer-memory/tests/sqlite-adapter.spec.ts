@@ -6,14 +6,10 @@ import { initializeIndividual } from "../src/modules/memory/infrastructure/persi
 import { createIndividualStateStore } from "../src/modules/memory/infrastructure/persistence/sqlite/individual-state-store.ts";
 import { createOperationStore } from "../src/modules/memory/infrastructure/persistence/sqlite/operation-store.ts";
 import { createRevisionStore } from "../src/modules/memory/infrastructure/persistence/sqlite/revision-store.ts";
-import {
-  migrations,
-  reversals,
-} from "../src/modules/memory/infrastructure/persistence/sqlite/migrations/generated.ts";
-import type {
-  SqlSession,
-  SqlValue,
-} from "../src/modules/memory/infrastructure/persistence/sqlite/session.ts";
+import { migrations } from "../src/modules/memory/infrastructure/persistence/sqlite/migrations/migrations.generated.ts";
+import { reversals } from "../src/modules/memory/infrastructure/persistence/sqlite/migrations/reversals.generated.ts";
+import type { SqlSession } from "../src/modules/memory/infrastructure/persistence/sqlite/session.ts";
+import type { SqlValue } from "../src/modules/memory/infrastructure/persistence/sqlite/sql-value.ts";
 
 it("exercises SQLite-owned migrations and Stores without the Durable Object adapter", async () => {
   await runInDurableObject(

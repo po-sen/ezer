@@ -1,4 +1,4 @@
-export type MemoryFailureCode =
+type MemoryFailureCode =
   | "INVALID_INPUT"
   | "ALREADY_EXISTS"
   | "NOT_FOUND"

@@ -1,4 +1,4 @@
-export interface IndividualState {
+interface IndividualState {
   readonly individualId: string;
   readonly changeSequence: number;
 }

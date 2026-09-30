@@ -2,5 +2,7 @@
 apps/ezer-memory/worker-configuration.d.ts
 
 # Generated from versioned SQL; verified by migrations:check.
-apps/ezer-memory/src/modules/memory/infrastructure/persistence/sqlite/migrations/generated.ts
-apps/ezer-memory/src/modules/memory/infrastructure/persistence/durable-object/migrations/generated.ts
+apps/ezer-memory/src/modules/memory/infrastructure/persistence/sqlite/migrations/migrations.generated.ts
+apps/ezer-memory/src/modules/memory/infrastructure/persistence/sqlite/migrations/reversals.generated.ts
+apps/ezer-memory/src/modules/memory/infrastructure/persistence/durable-object/migrations/migrations.generated.ts
+apps/ezer-memory/src/modules/memory/infrastructure/persistence/durable-object/migrations/reversals.generated.ts

@@ -1,21 +1,7 @@
 import { MemoryFault } from "./memory-fault.ts";
 import type { MemoryRevision } from "./memory-revision.ts";
-import type { MemorySource } from "./memory-source.ts";
+import type { RevisionIntent } from "./revision-intent.ts";
 import { validateMemoryId } from "./validate-memory-id.ts";
-
-export interface RevisionContent {
-  readonly memoryId: string;
-  readonly body: string;
-  readonly source: MemorySource;
-}
-export type RevisionIntent =
-  | { readonly kind: "remember"; readonly content: RevisionContent }
-  | {
-      readonly kind: "revise";
-      readonly content: RevisionContent;
-      readonly expectedRevision: number;
-      readonly reason: string;
-    };
 
 function text(value: string, limit: number): boolean {
   return (

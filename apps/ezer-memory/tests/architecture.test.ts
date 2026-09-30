@@ -31,11 +31,7 @@ function violation(file: string, dependency: string): string | undefined {
     const allowed: Record<string, string[]> = {
       "entrypoints/worker.ts": [
         "bootstrap/create-worker",
-        "entrypoints/ezer-memory",
-      ],
-      "entrypoints/ezer-memory.ts": [
         "cloudflare:workers",
-        "bootstrap/create-memory",
       ],
       "entrypoints/migrate-sqlite.ts": [
         "node:util",
@@ -126,7 +122,9 @@ function sourceFiles(directory: string): string[] {
     assert(!entry.isSymbolicLink(), "source files must not be symlinks");
     const path = resolve(directory, entry.name);
     if (entry.isDirectory()) return sourceFiles(path);
-    return entry.isFile() && entry.name.endsWith(".ts") ? [path] : [];
+    return entry.isFile() && /\.(?:ts|tsx|mts|cts)$/.test(entry.name)
+      ? [path]
+      : [];
   });
 }
 
@@ -219,7 +217,7 @@ test("the boundary guard rejects SDK leakage, reversed dependencies, and foreign
     ],
     [
       "modules/memory/infrastructure/persistence/durable-object/migrate-memory.ts",
-      "../sqlite/migrations/generated",
+      "../sqlite/migrations/migrations.generated",
     ],
     [
       "modules/memory/infrastructure/persistence/durable-object/session.ts",
@@ -231,7 +229,7 @@ test("the boundary guard rejects SDK leakage, reversed dependencies, and foreign
     ],
     [
       "modules/memory/infrastructure/persistence/postgresql/migrate-memory.ts",
-      "../sqlite/migrations/generated.ts",
+      "../sqlite/migrations/migrations.generated.ts",
     ],
     [
       "modules/memory/infrastructure/persistence/sqlite/migrate-memory.ts",
@@ -269,10 +267,10 @@ test("the boundary guard rejects SDK leakage, reversed dependencies, and foreign
 
 test("infrastructure boundaries include type imports and re-exports", () => {
   for (const source of [
-    'import { migrations } from "../sqlite/migrations/generated";',
+    'import { migrations } from "../sqlite/migrations/migrations.generated";',
     'import type { SqlSession } from "../sqlite/session";',
     'type Session = import("../sqlite/session").SqlSession;',
-    'export { migrations } from "../sqlite/migrations/generated";',
+    'export { migrations } from "../sqlite/migrations/migrations.generated";',
     'export type { SqlSession } from "../sqlite/session";',
     'export * from "../sqlite/session";',
   ]) {
@@ -286,7 +284,7 @@ test("infrastructure boundaries include type imports and re-exports", () => {
   }
   for (const dependency of [
     "./session",
-    "./migrations/generated",
+    "./migrations/migrations.generated",
     "../contract",
     "../../../ports/outbound/unit-of-work",
   ]) {
@@ -304,10 +302,13 @@ function responsibilityViolations(file: string, text: string): string[] {
   const failures: string[] = [];
   const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
   const layer = layerOf(file);
-  const generatedSql = [
-    "modules/memory/infrastructure/persistence/sqlite/migrations/generated.ts",
-    "modules/memory/infrastructure/persistence/durable-object/migrations/generated.ts",
-  ].includes(file);
+  const generatedSql = ["sqlite", "durable-object"].some((adapter) =>
+    ["migrations", "reversals"].some(
+      (name) =>
+        file ===
+        `modules/memory/infrastructure/persistence/${adapter}/migrations/${name}.generated.ts`,
+    ),
+  );
   const sqlite = file.startsWith(
     "modules/memory/infrastructure/persistence/sqlite/",
   );
@@ -447,41 +448,102 @@ test("SQLite compiles with Node declarations and without Cloudflare", () => {
   );
 });
 
-test("authored TypeScript modules expose at most one public callable", () => {
-  const appRoot = resolve(sourceRoot, "..");
-  const files = [
-    sourceRoot,
-    resolve(appRoot, "tests"),
-    resolve(appRoot, "scripts"),
-  ].flatMap(sourceFiles);
-  const program = ts.createProgram(files, {
-    target: ts.ScriptTarget.ESNext,
-    module: ts.ModuleKind.ESNext,
-    moduleResolution: ts.ModuleResolutionKind.Bundler,
-    noEmit: true,
-    skipLibCheck: true,
-  });
-  const checker = program.getTypeChecker();
-  for (const path of files) {
-    const source = program.getSourceFile(path)!;
-    const module = checker.getSymbolAtLocation(source);
-    if (!module) continue;
-    const callables = checker.getExportsOfModule(module).filter((symbol) => {
-      const target =
-        symbol.flags & ts.SymbolFlags.Alias
-          ? checker.getAliasedSymbol(symbol)
-          : symbol;
-      const declaration = target.valueDeclaration;
-      return (
-        declaration &&
-        checker
-          .getTypeOfSymbolAtLocation(target, declaration)
-          .getCallSignatures().length > 0
-      );
-    });
-    assert(
-      callables.length <= 1,
-      `${relative(appRoot, path)} exports ${callables.map((symbol) => symbol.name).join(", ")}`,
+function pairingViolations(files: ReadonlyMap<string, string>): string[] {
+  const entrypoints = [...files.keys()].filter((file) =>
+    file.startsWith("entrypoints/"),
+  );
+  const bootstraps = [...files.keys()].filter((file) =>
+    file.startsWith("bootstrap/"),
+  );
+  const failures: string[] = [];
+  const owners = new Map<string, string[]>();
+  if (entrypoints.length !== bootstraps.length)
+    failures.push("entrypoints and bootstrap must have equal file counts");
+  for (const entrypoint of entrypoints) {
+    const source = ts.createSourceFile(
+      entrypoint,
+      files.get(entrypoint)!,
+      ts.ScriptTarget.Latest,
+      true,
     );
+    const dependencies = new Set<string>();
+    const inspect = (node: ts.Node) => {
+      let dependency: string | undefined;
+      if (
+        (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
+        node.moduleSpecifier &&
+        ts.isStringLiteral(node.moduleSpecifier)
+      )
+        dependency = node.moduleSpecifier.text;
+      if (
+        ts.isImportTypeNode(node) &&
+        ts.isLiteralTypeNode(node.argument) &&
+        ts.isStringLiteral(node.argument.literal)
+      )
+        dependency = node.argument.literal.text;
+      if (dependency !== undefined) {
+        const target = relative(
+          sourceRoot,
+          resolve(sourceRoot, dirname(entrypoint), dependency),
+        )
+          .split(sep)
+          .join("/");
+        if (target.startsWith("bootstrap/")) dependencies.add(target);
+      }
+      ts.forEachChild(node, inspect);
+    };
+    inspect(source);
+    if (dependencies.size !== 1)
+      failures.push(`${entrypoint} must import exactly one bootstrap module`);
+    for (const dependency of dependencies) {
+      if (!bootstraps.includes(dependency))
+        failures.push(
+          `${entrypoint} imports a missing bootstrap: ${dependency}`,
+        );
+      owners.set(dependency, [...(owners.get(dependency) ?? []), entrypoint]);
+    }
   }
+  for (const bootstrap of bootstraps) {
+    if (owners.get(bootstrap)?.length !== 1)
+      failures.push(`${bootstrap} must belong to exactly one entrypoint`);
+  }
+  return failures;
+}
+
+test("entrypoints and bootstrap have equal file counts and pair one-to-one", () => {
+  const paths = ["entrypoints", "bootstrap"].flatMap((directory) =>
+    sourceFiles(resolve(sourceRoot, directory)),
+  );
+  const files = new Map(
+    paths.map((path) => [
+      relative(sourceRoot, path).split(sep).join("/"),
+      readFileSync(path, "utf8"),
+    ]),
+  );
+  assert.deepEqual(pairingViolations(files), []);
+});
+
+test("the pairing guard rejects shared, missing, orphaned, and multiple bootstraps", () => {
+  const valid = new Map([
+    ["entrypoints/a.ts", 'import { createA } from "../bootstrap/a.ts";'],
+    ["entrypoints/b.ts", 'import { createB } from "../bootstrap/b.ts";'],
+    ["bootstrap/a.ts", "export function createA() {}"],
+    ["bootstrap/b.ts", "export function createB() {}"],
+  ]);
+  assert.deepEqual(pairingViolations(valid), []);
+  for (const replacement of [
+    'import { createA } from "../bootstrap/a.ts";',
+    'import { missing } from "../bootstrap/missing.ts";',
+    'import { createA } from "../bootstrap/a.ts"; import { createB } from "../bootstrap/b.ts";',
+    'import { createB } from "../bootstrap/b.ts"; export { createA } from "../bootstrap/a.ts";',
+    'import { createB } from "../bootstrap/b.ts"; type Other = typeof import("../bootstrap/a.ts");',
+    "export default {};",
+  ]) {
+    const invalid = new Map(valid);
+    invalid.set("entrypoints/b.ts", replacement);
+    assert(pairingViolations(invalid).length > 0, replacement);
+  }
+  const orphan = new Map(valid);
+  orphan.set("bootstrap/orphan.ts", "export const orphan = {};");
+  assert(pairingViolations(orphan).length > 0);
 });
