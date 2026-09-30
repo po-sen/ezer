@@ -42,7 +42,8 @@ function violation(file: string, dependency: string): string | undefined {
   }
   if (!dependency.startsWith(".")) {
     if (
-      file === "memory/infrastructure/persistence/sqlite/migrate-memory.ts" &&
+      file ===
+        "memory/infrastructure/persistence/durable-object/migrate-memory.ts" &&
       dependency === "durable-utils/sql-migrations"
     )
       return;
@@ -60,6 +61,12 @@ function violation(file: string, dependency: string): string | undefined {
     .split(sep)
     .join("/");
   const [targetContext, targetLayer] = target.split("/");
+  if (
+    file.startsWith("memory/infrastructure/persistence/sqlite/") &&
+    target.startsWith("memory/infrastructure/") &&
+    !target.startsWith("memory/infrastructure/persistence/sqlite/")
+  )
+    return "SQLite must not depend on a runtime adapter";
   if (targetContext !== context)
     return "cross-context dependency outside an explicit integration";
   if (
@@ -144,6 +151,14 @@ test("the boundary guard rejects SDK leakage, reversed dependencies, and foreign
       "../application/commit-memory",
     ],
     ["index.ts", "./memory/infrastructure/sqlite-memory-store"],
+    [
+      "memory/infrastructure/persistence/sqlite/session.ts",
+      "../durable-object/session",
+    ],
+    [
+      "memory/infrastructure/persistence/sqlite/migrate-memory.ts",
+      "durable-utils/sql-migrations",
+    ],
   ] as const) {
     assert(
       violation(file, dependency),
@@ -158,6 +173,13 @@ test("the boundary guard rejects SDK leakage, reversed dependencies, and foreign
     violation("memory/delivery/mcp.ts", "@modelcontextprotocol/server"),
     undefined,
   );
+  assert.equal(
+    violation(
+      "memory/infrastructure/persistence/durable-object/unit-of-work.ts",
+      "../sqlite/revision-store",
+    ),
+    undefined,
+  );
 });
 
 function responsibilityViolations(file: string, text: string): string[] {
@@ -166,7 +188,7 @@ function responsibilityViolations(file: string, text: string): string[] {
   const layer = file.split("/")[1];
   const generatedSql =
     file === "memory/infrastructure/persistence/sqlite/migrations/generated.ts";
-  const nativeSql = file.startsWith("memory/infrastructure/persistence/");
+  const sqlite = file.startsWith("memory/infrastructure/persistence/sqlite/");
   const inner = [
     "domain",
     "application",
@@ -175,13 +197,19 @@ function responsibilityViolations(file: string, text: string): string[] {
   ].includes(layer ?? "");
   const inspect = (node: ts.Node) => {
     if (
-      inner &&
+      (inner || sqlite) &&
       ts.isIdentifier(node) &&
       [
         "DurableObjectStorage",
         "SqlStorage",
         "SqlStorageCursor",
+        "SqlStorageValue",
         "DurableObjectState",
+        "DurableObject",
+        "DurableObjectNamespace",
+        "DurableObjectId",
+        "DurableObjectStub",
+        "Cloudflare",
         "Env",
         "Request",
         "Response",
@@ -189,7 +217,7 @@ function responsibilityViolations(file: string, text: string): string[] {
         "crypto",
       ].includes(node.text)
     )
-      failures.push("native capability in inner layer");
+      failures.push("native capability outside runtime adapter");
     if (ts.isStringLiteralLike(node)) {
       if (
         !generatedSql &&
@@ -197,12 +225,12 @@ function responsibilityViolations(file: string, text: string): string[] {
       )
         failures.push("DDL outside versioned migrations");
       if (
-        !nativeSql &&
+        !sqlite &&
         /\b(?:SELECT\s+.+\s+FROM|INSERT\s+INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM)\b/i.test(
           node.text,
         )
       )
-        failures.push("SQL outside owning persistence adapter");
+        failures.push("SQL outside SQLite adapter");
     }
     if (
       file.startsWith("bootstrap/") &&
@@ -242,8 +270,47 @@ test("source responsibilities exclude native handles, embedded DDL, and bootstra
     ],
     ["bootstrap/x.ts", "if (owner) save();"],
     ["memory/application/x.ts", "const sql = 'SELECT * FROM revisions';"],
+    [
+      "memory/infrastructure/persistence/sqlite/x.ts",
+      "let storage: DurableObjectStorage;",
+    ],
+    [
+      "memory/infrastructure/persistence/sqlite/x.ts",
+      "type Value = SqlStorageValue;",
+    ],
+    [
+      "memory/infrastructure/persistence/durable-object/x.ts",
+      "const sql = 'SELECT * FROM state';",
+    ],
   ])
     assert(responsibilityViolations(file!, text!).length > 0, file);
+});
+
+test("SQLite compiles without Cloudflare or other runtime declarations", () => {
+  const program = ts.createProgram(
+    sourceFiles(
+      resolve(sourceRoot, "memory/infrastructure/persistence/sqlite"),
+    ),
+    {
+      target: ts.ScriptTarget.ES2022,
+      module: ts.ModuleKind.ESNext,
+      moduleResolution: ts.ModuleResolutionKind.Bundler,
+      lib: ["lib.es2022.d.ts"],
+      types: [],
+      strict: true,
+      noUncheckedIndexedAccess: true,
+      exactOptionalPropertyTypes: true,
+      noEmit: true,
+    },
+  );
+  assert.deepEqual(
+    ts
+      .getPreEmitDiagnostics(program)
+      .map((diagnostic) =>
+        ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"),
+      ),
+    [],
+  );
 });
 
 test("authored TypeScript modules expose at most one public callable", () => {

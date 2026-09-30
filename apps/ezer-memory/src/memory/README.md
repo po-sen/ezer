@@ -44,9 +44,18 @@ runs inside the transaction. Nested transactions are rejected.
 
 ## Persistence ownership and context separation
 
-SQLite SQL, migration pairs, checksum pins, the generated SQL bundle, and its
-runner belong to `infrastructure/persistence/sqlite/`. A future PostgreSQL adapter
-would own a separate `infrastructure/persistence/postgresql/migrations/` history.
+SQLite SQL, row mapping, migration pairs, checksum pins, and the generated SQL
+bundle belong to `infrastructure/persistence/sqlite/`. The sibling
+`infrastructure/persistence/durable-object/` owns Cloudflare storage access,
+transactions, and the migration runner with its native KV ledger. SQLite defines
+a runtime-independent SQL session contract; Durable Object implements it and
+supplies it to the SQLite Stores. SQLite imports no Cloudflare types or Durable
+Object implementation, and the Durable Object adapter contains no handwritten SQL.
+Bootstrap owns the thin class entry point, lifecycle wiring, and composition;
+delivery owns RPC validation and delegation to inbound ports.
+
+A future PostgreSQL adapter would own a separate
+`infrastructure/persistence/postgresql/migrations/` history.
 Database dialects, version ledgers, and deployment lifecycles are adapter-specific;
 SQLite migration files are not a portable schema or a PostgreSQL upgrade history.
 Moving files does not change the current SQL bytes, checksum pins, or native ledger.
@@ -58,15 +67,14 @@ each object's SQLite storage is private to that object. See the
 [SQLite ATTACH documentation](https://www.sqlite.org/lang_attach.html) and
 [workerd's attachment restriction](https://github.com/cloudflare/workerd/blob/main/src/workerd/util/sqlite.c%2B%2B).
 
-Only Memory exists today. When another bounded context is introduced, choose and
-review its physical storage boundary explicitly. Separate SQLite databases (for
-Durable Objects, separate context-owned classes/namespaces and instances) provide
-physical separation. If contexts share a database instead, table prefixes and
-separate migration ledgers provide naming separation only; application ownership
-rules must still prevent cross-context SQL, foreign keys, and transactions. A
-PostgreSQL deployment can use one schema per context with context-owned migrations
-and appropriately restricted roles. None of these choices creates a new context
-merely because a table or provider has a different name.
+Only Memory exists today. Future SQLite contexts use separate databases (for
+Durable Objects, separate context-owned classes/namespaces and instances). The
+PostgreSQL deployment direction is one database per independently deployed Ezer,
+with one schema per context, context-owned migrations, and restricted runtime
+roles. A context needing independent deployment or data management can later use
+its own database. Transactions always stay within one context; cross-context SQL,
+foreign keys, and transactions are forbidden regardless of physical storage.
+These decisions introduce neither a new context nor a PostgreSQL implementation.
 
 For separate context-owned Durable Objects, a future logical Ezer identity must
 map to each context's object; namespace-specific object IDs are not a shared
@@ -90,8 +98,9 @@ honor the reference mechanism directly. Their scope is limited to this adapter.
 1. **Object-local lifecycle instead of `cmd/migrate`.** Durable Object SQLite has
    no shared PostgreSQL connection for a central migration command. Cloudflare
    recommends `blockConcurrencyWhile()` during construction. Bootstrap delegates
-   migration and identity initialization to separate persistence functions before
-   requests execute. It contains no SQL, business branching, or retry policy.
+   migration and identity initialization to the Durable Object adapter before
+   requests execute. That adapter owns transactions and consumes SQLite statements
+   and migration artifacts. Bootstrap contains no SQL, business branching, or retry policy.
 2. **Native KV ledger instead of PostgreSQL migration tables.** The pinned
    `durable-utils` runner owns the atomic version ledger. SQLite schemas, advisory
    locks, and golang-migrate's dirty flag are not emulated. A failed batch preserves

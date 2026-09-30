@@ -2,23 +2,16 @@ import {
   SQLSchemaMigrations,
   type SQLSchemaMigration,
 } from "durable-utils/sql-migrations";
-import { migrations } from "./migrations/generated";
+import { assertSupportedSchema } from "../sqlite/assert-supported-schema";
+import { migrations } from "../sqlite/migrations/generated";
+import { createSqlSession } from "./session";
 const ledgerKey = "memory:schema-version";
 
 export function migrateMemory(
   storage: DurableObjectStorage,
   plan: readonly SQLSchemaMigration[] = migrations,
 ): void {
-  // Old, unpublished PR databases are not an upgrade source. Never overwrite them.
-  if (
-    storage.sql
-      .exec(
-        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'memory_schema'",
-      )
-      .toArray().length
-  ) {
-    throw new Error("Unreleased memory schema requires explicit reset");
-  }
+  assertSupportedSchema(createSqlSession(storage.sql, () => true));
   const last = storage.kv.get<number>(ledgerKey);
   if (
     last !== undefined &&

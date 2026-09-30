@@ -1,8 +1,8 @@
 import { env } from "cloudflare:workers";
 import { runInDurableObject } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-import { migrateMemory } from "../src/memory/infrastructure/persistence/sqlite/migrate-memory";
-import { initializeIndividual } from "../src/memory/infrastructure/persistence/sqlite/initialize-individual";
+import { migrateMemory } from "../src/memory/infrastructure/persistence/durable-object/migrate-memory";
+import { initializeIndividual } from "../src/memory/infrastructure/persistence/durable-object/initialize-individual";
 import {
   migrations,
   reversals,

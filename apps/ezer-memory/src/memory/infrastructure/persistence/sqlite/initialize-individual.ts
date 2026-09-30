@@ -1,18 +1,16 @@
+import type { SqlSession } from "./session";
+
 export function initializeIndividual(
-  storage: DurableObjectStorage,
+  session: SqlSession,
   individualId: string,
 ): void {
-  storage.transactionSync(() => {
-    storage.sql.exec(
-      "INSERT INTO state (singleton, individual_id, change_sequence) VALUES (1, ?, 0) ON CONFLICT(singleton) DO NOTHING",
-      individualId,
-    );
-    const state = storage.sql
-      .exec<{ individual_id: string }>(
-        "SELECT individual_id FROM state WHERE singleton = 1",
-      )
-      .one();
-    if (state.individual_id !== individualId)
-      throw new Error("Memory store identity mismatch");
-  });
+  session.query(
+    "INSERT INTO state (singleton, individual_id, change_sequence) VALUES (1, ?, 0) ON CONFLICT(singleton) DO NOTHING",
+    individualId,
+  );
+  const state = session.query<{ individual_id: string }>(
+    "SELECT individual_id FROM state WHERE singleton = 1",
+  )[0];
+  if (!state || state.individual_id !== individualId)
+    throw new Error("Memory store identity mismatch");
 }

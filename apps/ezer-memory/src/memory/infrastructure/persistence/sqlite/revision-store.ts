@@ -1,6 +1,6 @@
 import type { RevisionStore } from "../../../outboundport/revision-store";
-import type { SqlSession } from "./session";
-interface RevisionRow extends Record<string, SqlStorageValue> {
+import type { SqlSession, SqlValue } from "./session";
+interface RevisionRow extends Record<string, SqlValue> {
   memory_id: string;
   revision: number;
   body: string;

@@ -1,16 +1,16 @@
 import { env } from "cloudflare:workers";
 import { runInDurableObject } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-import { createSqliteUnitOfWork } from "../src/memory/infrastructure/persistence/sqlite/unit-of-work";
+import { createDurableObjectUnitOfWork } from "../src/memory/infrastructure/persistence/durable-object/unit-of-work";
 import { PersistenceFault } from "../src/memory/outboundport/persistence-fault";
 import type { MemoryStores } from "../src/memory/outboundport/unit-of-work";
 
-describe("SQLite Unit of Work boundaries", () => {
+describe("Durable Object Unit of Work boundaries", () => {
   it("revokes store capabilities after success or rollback, including a later transaction", async () => {
     await runInDurableObject(
       env.EZER_MEMORY.get(env.EZER_MEMORY.newUniqueId()),
       (_instance, { storage }) => {
-        const uow = createSqliteUnitOfWork(storage);
+        const uow = createDurableObjectUnitOfWork(storage);
         let leaked: MemoryStores | undefined;
         uow.within((stores) => {
           leaked = stores;
@@ -41,7 +41,7 @@ describe("SQLite Unit of Work boundaries", () => {
     await runInDurableObject(
       env.EZER_MEMORY.get(env.EZER_MEMORY.newUniqueId()),
       (_instance, { storage }) => {
-        const uow = createSqliteUnitOfWork(storage);
+        const uow = createDurableObjectUnitOfWork(storage);
         expect(() => uow.within(() => uow.within(() => 1))).toThrow("Nested");
         // This compile-time rejection accompanies the runtime guard for JS callers.
         expect(() =>
@@ -105,7 +105,7 @@ describe("SQLite Unit of Work boundaries", () => {
     await runInDurableObject(
       env.EZER_MEMORY.get(env.EZER_MEMORY.newUniqueId()),
       (_instance, { storage }) => {
-        const uow = createSqliteUnitOfWork(storage);
+        const uow = createDurableObjectUnitOfWork(storage);
         storage.sql.exec("DROP TABLE operations");
         try {
           uow.within((stores) => stores.operations.find("x"));

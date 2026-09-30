@@ -74,6 +74,11 @@ not serve as wire contracts. A focused Unit of Work owns transaction demarcation
 Stores do not begin or commit transactions. Keep versioned SQL pairs under the
 owning context's `infrastructure/persistence/<technology>/migrations/` (currently
 `sqlite`); migrations and their generated bundles belong to the database adapter.
+Keep `persistence/sqlite/` and `persistence/durable-object/` as sibling adapters.
+SQLite owns SQL, row mapping, and its runtime-independent session contract.
+Durable Object owns the native session implementation, transactions, and migration
+execution with its native version ledger. SQLite must not depend on Cloudflare
+types or the Durable Object adapter; handwritten SQL stays inside SQLite.
 Never embed handwritten DDL in TypeScript. Review SQL and checksum changes before regenerating the bundle.
 Released migration files and pins are immutable. See the memory context README
 for explicit Cloudflare lifecycle and forward-only recovery adaptations. Add
