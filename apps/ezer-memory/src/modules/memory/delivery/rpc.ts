@@ -1,5 +1,9 @@
 import { z } from "zod";
-import type { CommitMemory, InspectMemory } from "../ports/inbound/index.ts";
+import type {
+  CommitMemory,
+  InspectMemory,
+  InspectMemoryState,
+} from "../ports/inbound/index.ts";
 
 const content = {
   operationId: z.string(),
@@ -23,8 +27,16 @@ const read = z.strictObject({
 export function createMemoryRpcHandler(
   commit: CommitMemory,
   inspect: InspectMemory,
+  state: InspectMemoryState,
 ) {
   return {
+    inspectState() {
+      try {
+        return state.execute();
+      } catch {
+        return { ok: false, code: "INTERNAL_ERROR" } as const;
+      }
+    },
     async commit(input: unknown) {
       const parsed = write.safeParse(input);
       if (!parsed.success) return { ok: false, code: "INVALID_INPUT" } as const;

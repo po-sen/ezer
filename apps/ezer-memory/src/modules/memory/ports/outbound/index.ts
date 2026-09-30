@@ -5,3 +5,4 @@ export { PersistenceFault } from "./persistence-fault.ts";
 export type { RequestFingerprint } from "./request-fingerprint.ts";
 export type { RevisionStore } from "./revision-store.ts";
 export type { UnitOfWork } from "./unit-of-work.ts";
+export type { MemoryStateReader } from "./memory-state-reader.ts";

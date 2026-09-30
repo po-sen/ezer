@@ -225,6 +225,9 @@ importers:
       durable-utils:
         specifier: 0.3.7
         version: 0.3.7
+      jose:
+        specifier: 6.2.12
+        version: 6.2.12
       node-pg-migrate:
         specifier: 9.0.0
         version: 9.0.0(@types/pg@8.23.1)(pg@8.23.0)

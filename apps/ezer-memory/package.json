@@ -23,6 +23,7 @@
   "dependencies": {
     "@modelcontextprotocol/server": "2.1.0",
     "durable-utils": "0.3.7",
+    "jose": "6.2.12",
     "node-pg-migrate": "9.0.0",
     "pg": "8.23.0",
     "postgrator": "8.0.0",

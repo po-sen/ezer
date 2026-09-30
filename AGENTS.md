@@ -3,9 +3,10 @@
 ## Scope and working agreements
 
 Ezer is an early-stage plugin project using Agent Skills and MCP. The planned
-memory service uses TypeScript on Cloudflare Workers. Its public MCP endpoint
-exposes service information. An internal SQLite-backed Durable Object implements
-memory persistence; authentication and public memory tools are not implemented.
+memory service uses TypeScript on Cloudflare Workers. Its authenticated MCP endpoint
+exposes service information and authorized Ezer identity metadata. An internal
+SQLite-backed Durable Object implements memory persistence; public memory
+read/write tools and authorization-provider provisioning are not implemented.
 Keep product behavior portable across compatible host agents.
 These instructions guide repository development, not Ezer's runtime personality.
 
@@ -49,8 +50,9 @@ Service commands are available with `pnpm --filter @ezer/memory run <command>`:
 `migrations:generate`, `migrations:check`, `migrate:sqlite`,
 `migrate:postgresql`, and `test:postgresql`. The full check requires the dedicated
 PostgreSQL test service described in the service README. Persistence tests
-use synthetic data through the internal `EZER_MEMORY` binding. Keep that binding
-off public HTTP/MCP routes until authentication and individual authorization exist.
+use synthetic data through the internal `EZER_MEMORY` binding. Public identity
+lookup may read only the server-authorized object's change sequence. Keep memory
+contents and mutations off public HTTP/MCP until their scoped tools are implemented.
 Worker declarations are generated with `wrangler types`; commit the output after
 configuration, export, or Wrangler changes. Never hand-edit or format
 `apps/ezer-memory/worker-configuration.d.ts`. The full check rejects stale types
@@ -137,6 +139,19 @@ commit individually. SQLite locks before reading history and commits pending SQL
 and its ledger together. Never print connection details, SQL, raw provider errors,
 or private data from operational commands. Add layers when they have real responsibilities, not as empty scaffolding. Extend
 architecture checks when introducing a new context or allowed dependency.
+
+Access owns external OAuth token validation and operator-configured
+subject-to-individual bindings. Only Memory's HTTP/MCP delivery may consume
+Access's public inbound contracts; do not couple their application, domain, or
+infrastructure implementations. Read policy through explicit Worker bindings,
+not ambient process variables or environment files. An invalid or missing policy
+must fail closed. Credentials, session IDs, client labels, and unchecked individual
+IDs must never determine storage routing. The Durable Object adapter maps the
+authorized logical ID to the stable name `ezer:v1:<individualId>`; changing that
+prefix or namespace requires an explicit data migration plan. Keep the logical ID
+separate from internal storage-local object IDs. Test JWTs and signing keys must be
+ephemeral synthetic data. Never add real credentials or a live provider dependency
+to CI; native login and remote compatibility require separate acceptance tests.
 
 ## TypeScript exports
 

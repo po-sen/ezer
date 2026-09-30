@@ -2,6 +2,8 @@ import {
   createCommitMemory,
   createInspectMemory,
   createDescribeMemoryService,
+  createInspectMemoryState,
+  createDescribeMemoryBinding,
 } from "../modules/memory/application/index.ts";
 
 import {
@@ -14,15 +16,34 @@ import {
   initializeIndividual,
   migrateMemory,
   createDurableObjectUnitOfWork,
+  createMemoryStateReader,
 } from "../modules/memory/infrastructure/persistence/durable-object/index.ts";
 
 import metadata from "../../package.json" with { type: "json" };
+import { createAccessControl } from "../modules/access/application/index.ts";
+import { createAccessPolicyReader } from "../modules/access/infrastructure/configuration/index.ts";
+import { createAccessTokenVerifier } from "../modules/access/infrastructure/jwt/index.ts";
 
-export function createWorker(): ExportedHandler {
+export function createWorker() {
   const describeService = createDescribeMemoryService(metadata.version);
+  const verifier = createAccessTokenVerifier();
   return {
-    fetch: createMemoryHttpHandler(createMemoryMcpHandler(describeService)),
-  };
+    fetch: (request: Request, env: Env) =>
+      createMemoryHttpHandler(
+        createAccessControl(
+          createAccessPolicyReader(env.EZER_AUTHORIZATION),
+          verifier,
+        ),
+        (individual) =>
+          createMemoryMcpHandler(
+            describeService,
+            individual,
+            createDescribeMemoryBinding(
+              createMemoryStateReader(env.EZER_MEMORY),
+            ),
+          ),
+      )(request),
+  } satisfies ExportedHandler<Env>;
 }
 
 export function createMemory(
@@ -40,6 +61,7 @@ export function createMemory(
         new Date().toISOString(),
       ),
       createInspectMemory(unitOfWork),
+      createInspectMemoryState(unitOfWork),
     ),
   };
 }

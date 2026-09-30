@@ -3,8 +3,10 @@
 Memory owns sourced text revisions, correction invariants, individual change
 ordering, and operation receipts. It does not choose what an agent remembers,
 define personality, infer emotions, authorize callers, or provide semantic search.
-One bound Durable Object owns one individual's SQLite database. Public HTTP/MCP
-continues to expose service information only.
+One bound Durable Object owns one individual's SQLite database. Authenticated MCP
+exposes service information and the authorized individual's ID/change sequence,
+but no memory contents or mutations. The separate Access context validates tokens
+and supplies the authorized logical ID through its public inbound contract.
 
 ## Architecture correspondence
 
@@ -88,21 +90,25 @@ each object's SQLite storage is private to that object. See the
 [SQLite ATTACH documentation](https://www.sqlite.org/lang_attach.html) and
 [workerd's attachment restriction](https://github.com/cloudflare/workerd/blob/main/src/workerd/util/sqlite.c%2B%2B).
 
-Only Memory exists today. Future SQLite contexts use separate databases (for
+Memory owns persistence; Access currently uses operator configuration rather than
+a database. Future SQLite contexts use separate databases (for
 Durable Objects, separate context-owned classes/namespaces and instances). The
 PostgreSQL deployment direction is one database per independently deployed Ezer,
 with one schema per context, context-owned migrations, and restricted runtime
 roles. A context needing independent deployment or data management can later use
 its own database. Transactions always stay within one context; cross-context SQL,
 foreign keys, and transactions are forbidden regardless of physical storage.
-Only the memory context is implemented. PostgreSQL memory Stores and service
+Only the Memory context has persistent storage. PostgreSQL memory Stores and service
 composition remain future work.
 
-For separate context-owned Durable Objects, a future logical Ezer identity must
-map to each context's object; namespace-specific object IDs are not a shared
-cross-context identity contract. Integration goes through provider inbound ports
-or explicit events, never another context's database. That topology and identity
-mapping are not implemented by this directory change.
+The public logical Ezer ID comes from Access's server-owned subject binding. The
+DO adapter maps it to `ezer:v1:<individualId>` inside the memory namespace; the
+object's native ID remains internal. Identity lookup reads its current change
+sequence through a use case and Unit of Work, without exposing contents. Future
+persistent contexts must map the same logical ID to their own object/database.
+Namespace-specific object IDs are not a shared cross-context identity contract.
+Integration goes through provider inbound ports or explicit events, never another
+context's database. No cross-context transaction is introduced.
 
 PostgreSQL is not currently a drop-in adapter: the synchronous Store and Unit of
 Work contracts reflect Durable Object SQLite's `transactionSync`. Supporting a

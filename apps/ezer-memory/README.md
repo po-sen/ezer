@@ -1,10 +1,11 @@
 # Ezer memory service
 
 This package implements Ezer's independent memory service in TypeScript on
-Cloudflare Workers. The public MCP endpoint exposes service information only.
+Cloudflare Workers. The MCP endpoint requires an authorized connection.
 An internal SQLite-backed Durable Object stores sourced text memories and their
-revision history. Authentication, public memory tools, model invocation, and
-cloud deployment are not implemented.
+revision history. OAuth JWT access-token validation and Ezer identity binding are
+implemented. Public memory read/write tools, login-provider provisioning, model
+invocation, and cloud deployment are not implemented.
 
 ## Development
 
@@ -35,12 +36,101 @@ configuration; a real deployment requires a separate, authorized setup.
   limited to 64 KiB; browser requests with a foreign Origin are rejected.
 - `ezer_service_info` takes no arguments and reports the service version, its
   `foundation` stage, and disabled memory read/write capabilities.
+- `ezer_identity` takes no arguments and returns the bound logical `individualId`
+  and current `changeSequence`. It never returns memory contents, the principal,
+  credentials, or a Cloudflare object ID.
+- `GET /.well-known/oauth-protected-resource/mcp` publishes the configured OAuth
+  resource, issuer, and required `ezer:connect` scope without authentication.
 
-This endpoint only returns public service metadata. Before exposing private
-memory operations, implement authentication and principal-to-memory authorization.
-Protocol sessions must never determine durable identity.
+Every MCP request is authenticated before protocol/body parsing. Protocol sessions
+never determine durable identity. Memory contents and mutations remain private to
+the internal binding; identity lookup reads only the authorized object's sequence.
 The current tests use synthetic MCP clients; native plugin installation and real
 Codex/Claude Code compatibility still require separate acceptance tests.
+
+## Authorization and stable identity
+
+The Access bounded context validates a principal and resolves a server-owned Ezer
+binding. Memory's HTTP/MCP delivery is the only cross-context consumer, through
+Access's public inbound contracts. Access owns neither memory SQL nor transactions.
+Its configuration and JWT adapters are independent and consume only outbound ports.
+No account database or custom login/token-issuing protocol is introduced.
+
+The operator supplies the non-secret JSON binding `EZER_AUTHORIZATION` through
+trusted deployment configuration. The committed default is `{}`: `/mcp` and
+resource metadata return `503` until the policy is valid; `/health` remains live.
+The following is a placeholder example, not a deployed service or a credential:
+
+```json
+{
+  "issuer": "https://login.example.com/",
+  "resource": "https://memory.example.com/mcp",
+  "jwksUri": "https://login.example.com/jwks",
+  "bindings": [
+    {
+      "subject": "provider-assigned-subject",
+      "individualId": "d5d3c3dc-6517-48c5-a2e5-f41437016894"
+    }
+  ]
+}
+```
+
+Use the authority's exact issuer and public JWKS endpoint. URLs must be canonical
+HTTPS URLs without user information, queries, or fragments. The resource must end
+at `/mcp`, match the request origin, and be the audience issued to this service.
+The authority must support the MCP clients' OAuth discovery/login flow and issue
+RFC 9068 JWT access tokens (`typ: at+jwt` or `application/at+jwt`) signed with RS256
+or ES256. `jose` verifies signature, issuer, audience, expiry, and not-before time;
+the required `sub`, `iat`, `exp`, `client_id`, and `jti` claims are also checked.
+ID tokens, opaque tokens, shared API keys, and token-supplied JWKS URLs are not
+supported by this adapter. It fetches only the operator-configured public key URL,
+does not follow redirects, and never forwards the incoming bearer credential.
+
+The token needs `ezer:connect`, and its verified subject must have exactly one
+binding at this endpoint. Multiple subjects can bind to the same Ezer, allowing
+different devices or provider subject identifiers to share an individual. Unknown
+principals and insufficient scopes receive `403`; missing, invalid, or expired
+tokens receive `401` with a resource-metadata challenge. Provider failures return
+`503` without private diagnostics. Authorization is checked on every request;
+headers, query parameters, tool arguments, sessions, and extra token claims cannot
+select another Ezer. Query parameters on the MCP endpoint are rejected.
+
+Choose a stable opaque individual ID (a UUID is recommended), not a display name.
+The Durable Object adapter maps it to `ezer:v1:<individualId>` within `EZER_MEMORY`.
+The first identity lookup may initialize that object's internal memory schema.
+Changing agents, tokens, subjects, or sessions does not change this mapping.
+Preserve the ID, routing prefix, and DO namespace across deployments. Changing an
+ID selects a different object; it is not a rename or migration. Internal RPC
+receipts retain their storage-local object IDs; public identity uses the logical
+ID. Existing randomly addressed test objects are not automatically adopted.
+
+Each deployment can operate independently. To give one principal multiple Ezers,
+use separate service endpoints/deployments with distinct OAuth resource audiences
+and their own bindings. This version intentionally has no client-selected Ezer or
+membership administration API. Removing a subject binding denies subsequent
+requests, including tokens whose signing keys are cached. Device revocation and
+refresh-token management belong to the authorization server/client. Individual
+JWT revocation is not introspected: use short-lived access tokens, and verify the
+provider's revocation behavior before deployment. Public signing keys are cached
+for at most five minutes with a three-second fetch timeout and thirty-second
+unknown-key refresh cooldown.
+
+Signing keys and login credentials stay with the external authorization provider.
+The host's OAuth client manages access and refresh credentials outside skills,
+tool arguments, memory, and Git. This resource server needs no private signing
+key or client secret. Worker configuration is read from explicit `env` bindings;
+the official `nodejs_compat_do_not_populate_process_env` flag prevents those
+bindings from also becoming ambient Node environment variables.
+
+Local tests use ephemeral synthetic signing keys and a mocked public key endpoint;
+they run the actual verifier, HTTP/MCP boundary, and DO storage. They do not prove
+a provider's login UX, native host compatibility, remote deployment, or
+cross-computer continuity. Deployment and provider configuration remain separate
+authorized work.
+
+References: [MCP authorization](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization),
+[RFC 9068](https://www.rfc-editor.org/rfc/rfc9068.html), and
+[jose](https://github.com/panva/jose).
 
 ## Code ownership
 
@@ -152,14 +242,16 @@ runtime coupling still needs review.
 SQLite database and persists its object ID as its internal individual identity.
 Callers holding the binding select the object; `commit` and `inspect` accept no
 individual, owner, session, or database selector. Storage isolation is not user
-authorization: a future authenticated adapter must select the authorized object
-and must never route using an unchecked client-supplied individual ID.
+authorization. The authenticated identity adapter selects the object using only
+the server-authorized logical ID. Future memory tools must use that same boundary,
+never an unchecked client-supplied individual ID.
 
 The internal RPC contract is provisional and is not the released plugin/MCP
 contract. Its methods return `{ ok: true, value }` or `{ ok: false, code }`:
 
 | Method                                                                                      | Behavior                                                                                                                                                             |
 | ------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `inspectState()`                                                                            | Read only the current change sequence for the bound object's identity metadata.                                                                                      |
 | `commit({ kind: "remember", operationId, memoryId, body, source })`                         | Create revision 1 of a new memory. Reusing a memory ID with a new operation returns `ALREADY_EXISTS`.                                                                |
 | `commit({ kind: "revise", operationId, memoryId, expectedRevision, body, source, reason })` | Append an immutable revision if the current version matches. Missing memories return `NOT_FOUND`; stale versions return `REVISION_CONFLICT`.                         |
 | `inspect({ memoryId, revision? })`                                                          | Read the latest or an exact historical revision, plus the current individual change sequence in the same snapshot. Missing memories or revisions return `NOT_FOUND`. |
@@ -338,7 +430,8 @@ All test data is disposable; the test container must be removed when finished.
 
 ## Next capabilities
 
-Implement authenticated principal-to-individual binding before registering
-private memory tools on MCP. Native plugin installation and cross-computer
+Add scoped private memory tools on MCP using the authenticated individual binding.
+`ezer:connect` authorizes identity lookup, not public memory content operations.
+Native provider login, plugin installation, and cross-computer
 continuity still require separate acceptance tests. R2 remains a later attachment
 candidate and is not bound or provisioned here.

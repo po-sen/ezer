@@ -31,7 +31,9 @@ function violation(file: string, dependency: string): string | undefined {
     : dependency;
   const facades: Record<string, readonly string[]> = {
     "index.ts": ["entrypoints/worker"],
-    "modules/index.ts": ["modules/memory/index"],
+    "modules/index.ts": ["modules/memory/index", "modules/access/index"],
+    "modules/access/index.ts": ["modules/access/ports/index"],
+    "modules/access/ports/index.ts": ["modules/access/ports/inbound/index"],
     "modules/memory/index.ts": ["modules/memory/ports/index"],
     "modules/memory/ports/index.ts": ["modules/memory/ports/inbound/index"],
   };
@@ -50,19 +52,25 @@ function violation(file: string, dependency: string): string | undefined {
   }
   if (file.startsWith("bootstrap/")) {
     return dependency.startsWith(".") &&
-      (target.startsWith("modules/memory/") || target === "../package.json")
+      (["modules/memory/", "modules/access/"].some((prefix) =>
+        target.startsWith(prefix),
+      ) ||
+        target === "../package.json")
       ? undefined
       : "unregistered bootstrap dependency";
   }
   const layer = layerOf(file);
+  const context = file.split("/")[1];
   if (
-    !file.startsWith("modules/memory/") ||
+    !["memory", "access"].includes(context ?? "") ||
     !Object.hasOwn(internalLayers, layer)
   )
     return "unregistered context or layer";
   if (!dependency.startsWith(".")) {
     const persistence = "modules/memory/infrastructure/persistence/";
     const externals: Record<string, readonly string[]> = {
+      "modules/access/infrastructure/configuration/": ["zod"],
+      "modules/access/infrastructure/jwt/": ["jose"],
       [`${persistence}durable-object/`]: ["durable-utils/sql-migrations"],
       [`${persistence}sqlite/cli/`]: [
         "node:crypto",
@@ -103,8 +111,16 @@ function violation(file: string, dependency: string): string | undefined {
     )
       return "infrastructure cannot import a sibling directory";
   }
-  if (!target.startsWith("modules/memory/"))
+  if (!target.startsWith(`modules/${context}/`)) {
+    // Only the MCP/HTTP delivery boundary may consume Access's public contracts.
+    if (
+      file.startsWith("modules/memory/delivery/") &&
+      (target.startsWith("modules/access/ports/inbound/") ||
+        ["modules/access/index", "modules/access/ports/index"].includes(target))
+    )
+      return;
     return "cross-context dependency outside an explicit integration";
+  }
   if (!internalLayers[layer]!.includes(targetLayer))
     return "dependency points outside the allowed layers";
 }
@@ -877,4 +893,27 @@ test("parent indexes cannot hide sibling adapters or reverse layer dependencies"
       content,
     );
   }
+});
+
+test("access integrations expose only inbound contracts to memory delivery", () => {
+  for (const [file, dependency] of [
+    ["modules/memory/application/x.ts", "../../../access/index.ts"],
+    ["modules/memory/delivery/x.ts", "../../access/application/index.ts"],
+    ["modules/memory/delivery/x.ts", "../../access/ports/outbound/index.ts"],
+    ["modules/access/application/x.ts", "../../memory/ports/inbound/index.ts"],
+    ["modules/access/domain/x.ts", "jose"],
+    ["modules/access/infrastructure/jwt/x.ts", "../configuration/index.ts"],
+  ])
+    assert(violation(file!, dependency!), file);
+  assert.equal(
+    violation("modules/memory/delivery/http.ts", "../../access/index.ts"),
+    undefined,
+  );
+  assert.equal(
+    violation(
+      "modules/memory/delivery/http.ts",
+      "../../access/ports/inbound/access-control.ts",
+    ),
+    undefined,
+  );
 });
