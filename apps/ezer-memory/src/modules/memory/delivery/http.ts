@@ -1,10 +1,12 @@
 import type { ConnectMemory } from "../ports/inbound/index.ts";
+import type { MemoryHttpSettings } from "./memory-http-settings.ts";
 
 export function createMemoryHttpHandler(
   connection: ConnectMemory,
   mcp: (individualId: string) => {
     fetch(request: Request): Promise<Response>;
   },
+  settings: MemoryHttpSettings | undefined,
 ) {
   return async (request: Request): Promise<Response> => {
     const url = new URL(request.url);
@@ -27,14 +29,13 @@ export function createMemoryHttpHandler(
     if (origin !== null && origin !== url.origin) {
       return new Response("Forbidden origin", { status: 403 });
     }
-    const description = connection.describe();
-    if (!description) {
+    if (!settings) {
       return Response.json(
         { error: "temporarily_unavailable" },
         { status: 503, headers: { "Cache-Control": "no-store" } },
       );
     }
-    const resource = new URL(description.resource);
+    const resource = new URL(settings.resource);
     if (url.origin !== resource.origin)
       return new Response("Not found", { status: 404 });
     if (url.search)
@@ -47,9 +48,9 @@ export function createMemoryHttpHandler(
         });
       return Response.json(
         {
-          resource: description.resource,
-          authorization_servers: [description.authorizationServer],
-          scopes_supported: ["ezer:connect"],
+          resource: settings.resource,
+          authorization_servers: [settings.authorizationServer],
+          scopes_supported: [settings.connectionScope],
           bearer_methods_supported: ["header"],
         },
         { headers: { "Cache-Control": "no-store" } },
@@ -58,20 +59,20 @@ export function createMemoryHttpHandler(
     const header = request.headers.get("Authorization");
     const token = header?.match(/^Bearer +([A-Za-z0-9._~-]+=*)$/i)?.[1] ?? null;
     const result = await connection.execute(token);
-    const challenge = `Bearer resource_metadata="${resource.origin}${metadataPath}", scope="ezer:connect"`;
+    const challenge = `Bearer resource_metadata="${resource.origin}${metadataPath}", scope="${settings.connectionScope}"`;
     if (!result.ok) {
       const status =
         result.code === "UNAVAILABLE"
           ? 503
-          : result.code === "UNAUTHENTICATED"
+          : result.code === "IDENTITY_REQUIRED"
             ? 401
             : 403;
       const error =
         result.code === "UNAVAILABLE"
           ? "temporarily_unavailable"
-          : result.code === "UNAUTHENTICATED"
+          : result.code === "IDENTITY_REQUIRED"
             ? "invalid_token"
-            : result.code === "INSUFFICIENT_SCOPE"
+            : result.code === "CONNECTION_NOT_GRANTED"
               ? "insufficient_scope"
               : "access_denied";
       return Response.json(
@@ -80,7 +81,7 @@ export function createMemoryHttpHandler(
           status,
           headers: {
             "Cache-Control": "no-store",
-            ...(status === 401 || result.code === "INSUFFICIENT_SCOPE"
+            ...(status === 401 || result.code === "CONNECTION_NOT_GRANTED"
               ? {
                   "WWW-Authenticate": header
                     ? `${challenge}, error="${error}"`

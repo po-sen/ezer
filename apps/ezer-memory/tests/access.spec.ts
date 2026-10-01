@@ -154,6 +154,51 @@ describe("authenticated Ezer identity", () => {
     ).toBe(404);
   });
 
+  it("binds each verifier to its configured authority even when public keys are cached", async () => {
+    const authority = await createTestAuthority();
+    const token = await authority.sign();
+    expect((await authority.request(request(token))).status).toBe(200);
+    const changedIssuer = {
+      ...authority.policy,
+      issuer: "https://second-issuer.test/",
+    };
+    expect(
+      (await authority.request(request(token), changedIssuer)).status,
+    ).toBe(401);
+    expect(
+      (
+        await authority.request(
+          request(await authority.sign({ iss: changedIssuer.issuer })),
+          changedIssuer,
+        )
+      ).status,
+    ).toBe(200);
+    const changedAudience = {
+      ...authority.policy,
+      resource: "https://second-resource.test/mcp",
+    };
+    expect(
+      (
+        await authority.request(
+          new Request(changedAudience.resource, request(token)),
+          changedAudience,
+        )
+      ).status,
+    ).toBe(401);
+    expect(
+      (
+        await authority.request(
+          new Request(
+            changedAudience.resource,
+            request(await authority.sign({ aud: changedAudience.resource })),
+          ),
+          changedAudience,
+        )
+      ).status,
+    ).toBe(200);
+    expect(authority.fetchKeys).toHaveBeenCalledTimes(1);
+  });
+
   it("routes authorized identities to persistent, separate memory objects after eviction", async () => {
     const authority = await createTestAuthority();
     const aliceId = `alice-${crypto.randomUUID()}`;
@@ -385,9 +430,12 @@ describe("authenticated Ezer identity", () => {
   it("keeps transport and provider details outside the authorization application", async () => {
     const authority = await createTestAuthority();
     const access = createAccessControl(
-      createAccessPolicyReader(authority.policy),
+      createAccessPolicyReader(authority.policy.bindings),
       {
-        verify: async () => ({ subject: "bob", scopes: ["ezer:connect"] }),
+        verify: async (credential) =>
+          credential
+            ? { status: "verified", callerId: "bob", permissions: ["connect"] }
+            : { status: "unrecognized" },
       },
     );
     expect(await access.authorize("synthetic")).toEqual({
@@ -396,7 +444,7 @@ describe("authenticated Ezer identity", () => {
     });
     expect(await access.authorize(null)).toEqual({
       ok: false,
-      code: "UNAUTHENTICATED",
+      code: "UNRECOGNIZED_CREDENTIAL",
     });
   });
 });

@@ -22,21 +22,23 @@ import {
 } from "../modules/memory/infrastructure/persistence/durable-object/index.ts";
 
 import metadata from "../../package.json" with { type: "json" };
+import { readWorkerConfiguration } from "../configuration/index.ts";
 import { createAccessControl } from "../modules/access/application/index.ts";
 import { createAccessPolicyReader } from "../modules/access/infrastructure/configuration/index.ts";
-import { createAccessTokenVerifier } from "../modules/access/infrastructure/jwt/index.ts";
+import { createCredentialVerifierFactory } from "../modules/access/infrastructure/jwt/index.ts";
 
 export function createWorker() {
   const describeService = createDescribeMemoryService(metadata.version);
-  const verifier = createAccessTokenVerifier();
+  const createVerifier = createCredentialVerifierFactory();
   return {
-    fetch: (request: Request, env: Env) =>
-      createMemoryHttpHandler(
+    fetch: (request: Request, env: Env) => {
+      const configuration = readWorkerConfiguration(env.EZER_AUTHORIZATION);
+      return createMemoryHttpHandler(
         createConnectMemory(
           createMemoryAccessGateway(
             createAccessControl(
-              createAccessPolicyReader(env.EZER_AUTHORIZATION),
-              verifier,
+              createAccessPolicyReader(configuration?.bindings),
+              createVerifier(configuration?.jwt),
             ),
           ),
         ),
@@ -48,7 +50,9 @@ export function createWorker() {
               createMemoryStateReader(env.EZER_MEMORY),
             ),
           ),
-      )(request),
+        configuration?.http,
+      )(request);
+    },
   } satisfies ExportedHandler<Env>;
 }
 

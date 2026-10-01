@@ -1,16 +1,14 @@
 import type { AuthorizedIndividual } from "./authorized-individual.ts";
 
 export interface AccessControl {
-  describe():
-    { readonly resource: string; readonly issuer: string } | undefined;
-  authorize(token: string | null): Promise<
+  authorize(credential: string | null): Promise<
     | { readonly ok: true; readonly individual: AuthorizedIndividual }
     | {
         readonly ok: false;
         readonly code:
-          | "UNAUTHENTICATED"
-          | "FORBIDDEN"
-          | "INSUFFICIENT_SCOPE"
+          | "UNRECOGNIZED_CREDENTIAL"
+          | "UNASSIGNED_CALLER"
+          | "MISSING_PERMISSION"
           | "UNAVAILABLE";
       }
   >;

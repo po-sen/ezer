@@ -29,6 +29,8 @@ These instructions guide repository development, not Ezer's runtime personality.
 - `.husky/`: local pre-commit hook.
 - `.github/`: CI and pull request template.
 - `apps/ezer-memory/`: Worker entry point, memory context, and service tests.
+- `apps/ezer-memory/src/configuration/`: deployment syntax validation and adapter
+  settings; never a shared bounded-context model.
 - `pnpm-workspace.yaml`: workspace membership and dependency build permissions.
 - `AGENTS.md`: canonical instructions; `CLAUDE.md` imports this file.
 
@@ -115,6 +117,19 @@ current implementation limits. Keep it aligned with code when responsibilities o
 boundaries change; distinguish implemented behavior from future plans.
 Keep domain models pure and place use
 cases behind inbound ports; external effects belong behind outbound ports.
+Each bounded context owns its vocabulary, decisions, inputs, and result types.
+Ports describe capabilities that the context needs, not how a provider implements
+them. Domain, application, and ports must not carry JWT/JWKS or OAuth discovery
+settings, wire claim names, provider error codes, SQL schemas, driver handles, or
+platform identities as platform-specific types. Renaming a provider field does
+not remove coupling: translate provider semantics at delivery, infrastructure, or
+the consumer-owned ACL. Configure implementation details through adapter factory
+arguments at composition time, never through a use-case request or inner port.
+Use independent context-owned contracts rather than aliases to another context's
+DTOs. Cover translation and replacement adapters with behavior tests, and extend
+architecture checks for newly discovered leaks. Synchronous transaction and
+idempotency guarantees are Memory contracts; changing them requires an explicit
+behavior design, not passing a provider transaction through a port.
 Delivery uses inbound ports, and bootstrap only composes implementations.
 Commands, queries, and detached views belong to inbound ports; domain types must
 not serve as wire contracts. A focused Unit of Work owns transaction demarcation;
@@ -154,8 +169,14 @@ ports, application, domain, or delivery. Validate declaration origins as well as
 import paths so aliases and barrels cannot bypass this boundary. Bootstrap may
 compose both contexts and the ACL; it must not perform contract translation.
 
-Access owns external OAuth token validation and operator-configured
-subject-to-individual bindings. Memory's `infrastructure/acl/access/` is the only
+Access owns verified callers, connection permission, and caller-to-individual
+assignments. Its `CredentialVerifier` port accepts opaque proof and returns
+Access-owned facts. JWT algorithms, issuer/audience checks, JWKS URLs, key caching,
+and scope-to-permission translation stay in the JWT adapter. The deployment
+configuration module validates explicit Worker bindings and supplies settings to
+the selected adapters; it cannot import context implementations. OAuth discovery
+and protocol errors belong to HTTP delivery, not Access or Memory inner contracts.
+Memory's `infrastructure/acl/access/` is the only
 registered cross-context adapter and imports Access's `ports/inbound/index.ts`.
 It translates Access results into Memory's own outbound contract. Memory delivery
 uses its own inbound connection use case; it never imports Access. The dependency

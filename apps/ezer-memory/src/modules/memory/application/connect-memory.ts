@@ -6,19 +6,6 @@ export function createConnectMemory(
   gateway: MemoryAccessGateway,
 ): ConnectMemory {
   return {
-    describe() {
-      try {
-        const description = gateway.describeResource();
-        return (
-          description && {
-            resource: description.resource,
-            authorizationServer: description.authorizationServer,
-          }
-        );
-      } catch {
-        return undefined;
-      }
-    },
     async execute(credential) {
       try {
         const result = await gateway.resolveIndividual(credential);
@@ -28,12 +15,12 @@ export function createConnectMemory(
         }
         if (result.status === "denied") {
           switch (result.reason) {
-            case "authentication":
-              return { ok: false, code: "UNAUTHENTICATED" };
-            case "permission":
-              return { ok: false, code: "FORBIDDEN" };
-            case "scope":
-              return { ok: false, code: "INSUFFICIENT_SCOPE" };
+            case "identity-required":
+              return { ok: false, code: "IDENTITY_REQUIRED" };
+            case "individual-not-granted":
+              return { ok: false, code: "INDIVIDUAL_NOT_GRANTED" };
+            case "connection-not-granted":
+              return { ok: false, code: "CONNECTION_NOT_GRANTED" };
           }
         }
       } catch {

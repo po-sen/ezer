@@ -5,19 +5,6 @@ export function createMemoryAccessGateway(
   access: AccessControl,
 ): MemoryAccessGateway {
   return {
-    describeResource() {
-      try {
-        const description = access.describe();
-        return (
-          description && {
-            resource: description.resource,
-            authorizationServer: description.issuer,
-          }
-        );
-      } catch {
-        return undefined;
-      }
-    },
     async resolveIndividual(credential) {
       try {
         const result = await access.authorize(credential);
@@ -27,12 +14,12 @@ export function createMemoryAccessGateway(
             individualId: result.individual.individualId,
           };
         switch (result.code) {
-          case "UNAUTHENTICATED":
-            return { status: "denied", reason: "authentication" };
-          case "FORBIDDEN":
-            return { status: "denied", reason: "permission" };
-          case "INSUFFICIENT_SCOPE":
-            return { status: "denied", reason: "scope" };
+          case "UNRECOGNIZED_CREDENTIAL":
+            return { status: "denied", reason: "identity-required" };
+          case "UNASSIGNED_CALLER":
+            return { status: "denied", reason: "individual-not-granted" };
+          case "MISSING_PERMISSION":
+            return { status: "denied", reason: "connection-not-granted" };
           default:
             return { status: "unavailable" };
         }

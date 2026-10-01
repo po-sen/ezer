@@ -35,8 +35,8 @@ reads or writes these tables directly.
 
 The [inbound ports](ports/inbound/index.ts) define commands, queries, and
 detached views. The context's [public index](index.ts) exposes selected inbound
-contracts. `ConnectMemory` describes the connection resource and resolves an
-authorized logical ID through Memory's own access gateway. `CommitMemory` and
+contracts. `ConnectMemory` resolves an authorized logical ID through Memory's own
+access gateway. It has no authorization-server metadata or protocol settings. `CommitMemory` and
 `InspectMemory` serve internal persistence operations; `InspectMemoryState` reads
 the current sequence. `DescribeMemoryBinding`
 resolves metadata for an already-authorized logical ID, and `DescribeMemoryService`
@@ -49,12 +49,25 @@ implements this port and is the only Memory adapter allowed to import
 [Access's inbound index](../access/ports/inbound/index.ts). Root context barrels
 are not allowed cross-context import paths, even for type-only imports.
 
-The ACL copies resource metadata and authorized IDs, translates denial codes,
+The ACL copies authorized IDs, translates Access decisions into Memory denials,
 and masks foreign exceptions. It neither re-exports Access contracts nor makes
 authorization decisions. Memory's application validates the returned ID and maps
 gateway outcomes to its own detached inbound view. Delivery then maps Memory's
 results to HTTP/MCP; it never receives Access objects. Domain, application, ports,
 delivery, and persistence remain independent of Access types and implementations.
+
+Memory's connection vocabulary is `IDENTITY_REQUIRED`, `INDIVIDUAL_NOT_GRANTED`,
+`CONNECTION_NOT_GRANTED`, and `UNAVAILABLE`. It does not use OAuth scope names or
+provider errors. HTTP delivery alone maps those outcomes to status codes and
+protocol challenges. Its `MemoryHttpSettings` receives discovery settings directly
+from service configuration; metadata does not travel through a Memory port or ACL.
+
+The persistence audit retains Memory-owned revisions, sequences, receipts, Store
+capabilities, and its synchronous atomic Unit of Work contract. SQL, schema names,
+driver values, and Cloudflare handles stay in persistence adapters. No physical
+schema or fingerprint format changes are part of this refactor. The existing
+asynchronous PostgreSQL serving limitation is described below; it is not hidden by
+exposing native transactions through a port.
 
 The dependency is `Memory -> Access`. Translating requests and responses is part
 of that one-way adapter; it does not permit Access to call back into Memory.

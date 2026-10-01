@@ -1,33 +1,35 @@
 import type { AccessControl } from "../ports/inbound/index.ts";
 import type {
   AccessPolicyReader,
-  AccessTokenVerifier,
+  CredentialVerifier,
 } from "../ports/outbound/index.ts";
 
 export function createAccessControl(
   policyReader: AccessPolicyReader,
-  verifier: AccessTokenVerifier,
+  verifier: CredentialVerifier,
 ): AccessControl {
   return {
-    describe() {
-      const policy = policyReader.read();
-      return policy && { resource: policy.resource, issuer: policy.issuer };
-    },
-    async authorize(token) {
-      const policy = policyReader.read();
-      if (!policy) return { ok: false, code: "UNAVAILABLE" };
-      if (!token || token.length > 8192)
-        return { ok: false, code: "UNAUTHENTICATED" };
+    async authorize(credential) {
       try {
-        const principal = await verifier.verify(token, policy);
-        if (!principal) return { ok: false, code: "UNAUTHENTICATED" };
-        const binding = policy.bindings.find(
-          (entry) => entry.subject === principal.subject,
+        const policy = policyReader.read();
+        if (!policy) return { ok: false, code: "UNAVAILABLE" };
+        const caller = await verifier.verify(credential);
+        if (caller.status === "unavailable")
+          return { ok: false, code: "UNAVAILABLE" };
+        if (caller.status !== "verified")
+          return { ok: false, code: "UNRECOGNIZED_CREDENTIAL" };
+        const assignments = policy.assignments.filter(
+          (entry) => entry.callerId === caller.callerId,
         );
-        if (!binding) return { ok: false, code: "FORBIDDEN" };
-        if (!principal.scopes.includes("ezer:connect"))
-          return { ok: false, code: "INSUFFICIENT_SCOPE" };
-        return { ok: true, individual: { individualId: binding.individualId } };
+        if (!assignments.length)
+          return { ok: false, code: "UNASSIGNED_CALLER" };
+        if (assignments.length !== 1) return { ok: false, code: "UNAVAILABLE" };
+        if (!caller.permissions.includes("connect"))
+          return { ok: false, code: "MISSING_PERMISSION" };
+        return {
+          ok: true,
+          individual: { individualId: assignments[0]!.individualId },
+        };
       } catch {
         return { ok: false, code: "UNAVAILABLE" };
       }

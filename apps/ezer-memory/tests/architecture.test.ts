@@ -59,10 +59,15 @@ function violation(
       (["modules/memory/", "modules/access/"].some((prefix) =>
         target.startsWith(prefix),
       ) ||
-        target === "../package.json")
+        target === "../package.json" ||
+        target.startsWith("configuration/"))
       ? undefined
       : "unregistered bootstrap dependency";
   }
+  if (file.startsWith("configuration/"))
+    return dependency === "zod" || target.startsWith("configuration/")
+      ? undefined
+      : "deployment configuration must not depend on context implementations";
   const layer = layerOf(file);
   const context = file.split("/")[1];
   if (
@@ -73,7 +78,6 @@ function violation(
   if (!dependency.startsWith(".")) {
     const persistence = "modules/memory/infrastructure/persistence/";
     const externals: Record<string, readonly string[]> = {
-      "modules/access/infrastructure/configuration/": ["zod"],
       "modules/access/infrastructure/jwt/": ["jose"],
       [`${persistence}durable-object/`]: ["durable-utils/sql-migrations"],
       [`${persistence}sqlite/cli/`]: [
@@ -372,6 +376,24 @@ function responsibilityViolations(file: string, text: string): string[] {
   ].includes(layer ?? "");
   const inspect = (node: ts.Node) => {
     if (
+      inner &&
+      ts.isIdentifier(node) &&
+      /^(jwksUri|issuer|audience|scopes?|authorizationServer|connectionScope|JWT|JOSE|JWKS)$/i.test(
+        node.text,
+      )
+    )
+      failures.push(
+        "provider or transport vocabulary in a context's inner contract",
+      );
+    if (
+      inner &&
+      ts.isStringLiteralLike(node) &&
+      /^(ezer:connect|Bearer|at\+jwt|insufficient_scope|invalid_token|RS256|ES256)$/.test(
+        node.text,
+      )
+    )
+      failures.push("protocol mapping belongs to an adapter");
+    if (
       (inner || sqlite) &&
       ts.isIdentifier(node) &&
       [
@@ -462,6 +484,71 @@ test("source responsibilities exclude native handles, embedded DDL, and bootstra
     ],
   ])
     assert(responsibilityViolations(file!, text!).length > 0, file);
+});
+
+test("context contracts reject provider settings and protocol vocabulary", () => {
+  for (const [file, content] of [
+    [
+      "modules/access/ports/outbound/verifier.ts",
+      "interface Verifier { verify(jwksUri: string): void }",
+    ],
+    [
+      "modules/access/ports/outbound/policy.ts",
+      "interface Policy { issuer: string; audience: string }",
+    ],
+    [
+      "modules/access/application/access.ts",
+      'const permission = "ezer:connect";',
+    ],
+    [
+      "modules/access/application/access.ts",
+      "const permissions = caller.scopes;",
+    ],
+    [
+      "modules/memory/ports/inbound/connection.ts",
+      "interface Connection { authorizationServer: string }",
+    ],
+    [
+      "modules/memory/ports/outbound/access.ts",
+      'type Failure = "insufficient_scope";',
+    ],
+    [
+      "modules/memory/domain/memory.ts",
+      "interface StoredMemory { row: SqlStorageValue }",
+    ],
+  ])
+    assert(responsibilityViolations(file!, content!).length > 0, content);
+  for (const [file, content] of [
+    [
+      "modules/access/ports/outbound/caller.ts",
+      'interface Caller { callerId: string; permissions: readonly "connect"[] }',
+    ],
+    [
+      "modules/memory/ports/outbound/state.ts",
+      "interface State { individualId: string; changeSequence: number }",
+    ],
+    [
+      "modules/access/infrastructure/jwt/adapter.ts",
+      "interface Settings { jwksUri: string; issuer: string }",
+    ],
+    [
+      "modules/memory/delivery/http.ts",
+      'const failure = "insufficient_scope";',
+    ],
+  ])
+    assert.deepEqual(responsibilityViolations(file!, content!), [], content);
+  assert(
+    violation(
+      "configuration/read-worker-configuration.ts",
+      "../modules/access/application/index.ts",
+    ),
+  );
+  assert(
+    violation(
+      "modules/access/application/control.ts",
+      "../../../configuration/index.ts",
+    ),
+  );
 });
 
 test("SQLite compiles with Node declarations and without Cloudflare", () => {

@@ -1,1 +1,1 @@
-export { createAccessTokenVerifier } from "./create-access-token-verifier.ts";
+export { createCredentialVerifierFactory } from "./create-credential-verifier-factory.ts";

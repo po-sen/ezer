@@ -60,6 +60,16 @@ inside the ACL. Access owns neither memory SQL nor transactions.
 Its configuration and JWT adapters are independent and consume only outbound ports.
 No account database or custom login/token-issuing protocol is introduced.
 
+Context contracts use their own language. Access accepts opaque credentials and
+works with verified callers, `connect` permission, and individual assignments.
+Memory works with individual connection grants and its own denial codes. JWT/JWKS
+settings, OAuth claims, discovery metadata, and protocol error names are confined
+to adapters and HTTP delivery. The service-level `src/configuration/` module
+validates the deployment document and supplies factory settings through bootstrap;
+it is not a shared context model. Provider URLs are never passed through a verifier
+port or use-case request. Authorization decisions still follow the configured
+issuer/audience and scope checks in the JWT adapter.
+
 The operator supplies the non-secret JSON binding `EZER_AUTHORIZATION` through
 trusted deployment configuration. The committed default is `{}`: `/mcp` and
 resource metadata return `503` until the policy is valid; `/health` remains live.

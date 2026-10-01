@@ -1,10 +1,21 @@
 import { createRemoteJWKSet, jwtVerify, errors } from "jose";
-import type { AccessTokenVerifier } from "../../ports/outbound/index.ts";
+import type { CredentialVerifier } from "../../ports/outbound/index.ts";
 
-export function createAccessTokenVerifier(): AccessTokenVerifier {
+interface JwtSettings {
+  readonly issuer: string;
+  readonly audience: string;
+  readonly jwksUri: string;
+  readonly connectionScope: string;
+}
+
+export function createCredentialVerifierFactory() {
   const authorities = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
-  return {
-    async verify(token, authority) {
+  return (settings: JwtSettings | undefined): CredentialVerifier => ({
+    async verify(credential) {
+      if (!settings) return { status: "unavailable" };
+      if (!credential || credential.length > 8192)
+        return { status: "unrecognized" };
+      const authority = { ...settings };
       let keys = authorities.get(authority.jwksUri);
       if (!keys) {
         if (authorities.size >= 16)
@@ -17,9 +28,9 @@ export function createAccessTokenVerifier(): AccessTokenVerifier {
         authorities.set(authority.jwksUri, keys);
       }
       try {
-        const { payload } = await jwtVerify(token, keys, {
+        const { payload } = await jwtVerify(credential, keys, {
           issuer: authority.issuer,
-          audience: authority.resource,
+          audience: authority.audience,
           algorithms: ["RS256", "ES256"],
           typ: "at+jwt",
           requiredClaims: [
@@ -47,11 +58,15 @@ export function createAccessTokenVerifier(): AccessTokenVerifier {
           payload.iat > payload.exp ||
           (payload.scope !== undefined && typeof payload.scope !== "string")
         )
-          return;
+          return { status: "unrecognized" };
         return {
-          subject: payload.sub,
-          scopes:
-            typeof payload.scope === "string" ? payload.scope.split(" ") : [],
+          status: "verified",
+          callerId: payload.sub,
+          permissions:
+            typeof payload.scope === "string" &&
+            payload.scope.split(" ").includes(authority.connectionScope)
+              ? ["connect"]
+              : [],
         };
       } catch (error) {
         if (
@@ -64,10 +79,9 @@ export function createAccessTokenVerifier(): AccessTokenVerifier {
           error instanceof errors.JOSENotSupported ||
           error instanceof errors.JWKSNoMatchingKey
         )
-          return;
-        // Provider/network failures are masked by the application as UNAVAILABLE.
-        throw new Error("Access token verification unavailable");
+          return { status: "unrecognized" };
+        return { status: "unavailable" };
       }
     },
-  };
+  });
 }
