@@ -108,7 +108,12 @@ SQLite's portable Stores and Node-only `sqlite/cli/` have separate indexes so Wo
 imports cannot pull in Node SQLite or migration packages.
 
 Organize service code by bounded context under `src/modules/`, with `ports/inbound/`
-and `ports/outbound/`. Keep domain models pure and place use
+and `ports/outbound/`. Every bounded context must have a root `README.md` that
+defines its domain, responsibilities, core concepts, and explicit non-responsibilities.
+Document its public contracts, collaboration with other contexts, owned data, and
+current implementation limits. Keep it aligned with code when responsibilities or
+boundaries change; distinguish implemented behavior from future plans.
+Keep domain models pure and place use
 cases behind inbound ports; external effects belong behind outbound ports.
 Delivery uses inbound ports, and bootstrap only composes implementations.
 Commands, queries, and detached views belong to inbound ports; domain types must

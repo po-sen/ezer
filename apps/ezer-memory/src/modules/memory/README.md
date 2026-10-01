@@ -1,19 +1,68 @@
 # Memory bounded context
 
-Memory owns sourced text revisions, correction invariants, individual change
-ordering, and operation receipts. It does not choose what an agent remembers,
-define personality, infer emotions, authorize callers, or provide semantic search.
-One bound Durable Object owns one individual's SQLite database. Authenticated MCP
-exposes service information and the authorized individual's ID/change sequence,
-but no memory contents or mutations. The separate Access context validates tokens
-and supplies the authorized logical ID through its public inbound contract.
+## Domain
+
+Memory preserves an individual's sourced text records and their revision history.
+It provides reliable storage and retrieval of what the agent decides to remember,
+including traceable corrections and ordered changes within that individual.
+
+## Responsibilities
+
+- Create immutable memory revisions with a source reference and excerpt.
+- Require a correction reason and matching expected revision when revising a record.
+- Maintain the individual's change sequence and operation receipts so writes are
+  ordered and completed retries return the original result.
+- Read a record's latest or requested revision and expose detached views through
+  inbound contracts.
+- Own memory storage isolation, transaction boundaries, and adapter-specific
+  migrations, including metadata lookup for an authorized logical individual.
+
+## Core concepts and owned data
+
+| Concept           | Meaning and ownership                                                                                                 |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Individual        | The owner of an isolated memory history. Its public logical ID comes from Access; native storage IDs remain internal. |
+| Memory            | A sourced text record identified within one individual's history.                                                     |
+| Revision          | An immutable version of a memory, with its source, timestamp, and correction reason where applicable.                 |
+| Change sequence   | The individual's increasing order of accepted memory changes, separate from a record's revision number.               |
+| Operation receipt | A persisted write result used for retry idempotency; an operation ID cannot be reused for different content.          |
+
+Memory owns revision data, individual state, and operation receipts. One bound
+Durable Object currently owns one individual's SQLite database. No other context
+reads or writes these tables directly.
+
+## Public contracts and collaboration
+
+The [inbound ports](ports/inbound/index.ts) define commands, queries, and
+detached views. The context's [public index](index.ts) exposes selected inbound
+contracts. `CommitMemory` and `InspectMemory` serve internal persistence
+operations; `InspectMemoryState` reads the current sequence. `DescribeMemoryBinding`
+resolves metadata for an already-authorized logical ID, and `DescribeMemoryService`
+reports service capabilities. Exporting a contract does not expose it over MCP.
+
+Memory's HTTP/MCP delivery consumes [Access](../access/README.md)'s public inbound
+contract to authorize each MCP request before calling Memory use cases. The
+application and persistence layers do not depend on Access implementations.
+Authenticated MCP currently exposes service information and the authorized
+individual's ID/change sequence, but no memory contents or mutations. Internal
+use cases do not independently authenticate callers and must not become public
+routes without delivery-level authorization.
+
+## Outside this context
+
+Memory does not choose what the agent remembers, define personality, infer
+emotions, or provide semantic search. Caller authentication and subject bindings
+belong to Access. Memory does not issue credentials, own another context's data,
+or coordinate cross-context transactions. Public memory-content tools and
+standalone SQLite/PostgreSQL serving deployments remain future work.
 
 ## Architecture correspondence
 
 The reference is Xerno AEP's
 [architecture at b4eaa1d](https://github.com/futurenestit/xerno/blob/b4eaa1d2e697d9664b3e6410bbd5af757d97406b/apps/agent-execution-platform/ARCHITECTURE.md).
-Its responsibilities and ownership rules apply here; its PostgreSQL, Go, process,
-and multi-context topology are not copied into this single-context Worker.
+Its responsibilities and ownership rules apply here; its PostgreSQL, Go, and
+process topology are not copied into this Worker. Access and Memory remain
+separate bounded contexts within the same application.
 
 | Reference rule                                       | Implementation                                                                                                                                                         | Evidence                                                                 |
 | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
