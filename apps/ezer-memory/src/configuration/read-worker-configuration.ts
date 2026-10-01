@@ -41,9 +41,24 @@ export function readWorkerConfiguration(configuration: unknown) {
   if (!parsed.success) return undefined;
   const { issuer, resource, jwksUri, bindings } = parsed.data;
   const connectionScope = "ezer:connect";
+  const readScope = "ezer:memory:read";
+  const writeScope = "ezer:memory:write";
   return {
     bindings,
-    jwt: { issuer, audience: resource, jwksUri, connectionScope },
-    http: { resource, authorizationServer: issuer, connectionScope },
+    jwt: {
+      issuer,
+      audience: resource,
+      jwksUri,
+      connectionScope,
+      readScope,
+      writeScope,
+    },
+    http: {
+      resource,
+      authorizationServer: issuer,
+      connectionScope,
+      readScope,
+      writeScope,
+    },
   };
 }

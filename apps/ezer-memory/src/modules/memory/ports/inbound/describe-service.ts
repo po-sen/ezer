@@ -3,8 +3,8 @@ interface MemoryServiceDescription {
   readonly version: string;
   readonly stage: "foundation";
   readonly capabilities: {
-    readonly memoryRead: false;
-    readonly memoryWrite: false;
+    readonly memoryRead: true;
+    readonly memoryWrite: true;
   };
 }
 

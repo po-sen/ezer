@@ -11,6 +11,20 @@ interface RevisionRow extends Record<string, SqlValue> {
   recorded_at: string;
   change_sequence: number;
 }
+function toRevision(row: RevisionRow) {
+  return Object.freeze({
+    memoryId: row.memory_id,
+    revision: row.revision,
+    body: row.body,
+    source: Object.freeze({
+      reference: row.source_reference,
+      excerpt: row.source_excerpt,
+    }),
+    reason: row.reason,
+    recordedAt: row.recorded_at,
+    changeSequence: row.change_sequence,
+  });
+}
 export function createRevisionStore(session: SqlSession): RevisionStore {
   return {
     find(memoryId, revision) {
@@ -26,20 +40,25 @@ export function createRevisionStore(session: SqlSession): RevisionStore {
               revision,
             )
       )[0];
-      return row
-        ? Object.freeze({
-            memoryId: row.memory_id,
-            revision: row.revision,
-            body: row.body,
-            source: Object.freeze({
-              reference: row.source_reference,
-              excerpt: row.source_excerpt,
-            }),
-            reason: row.reason,
-            recordedAt: row.recorded_at,
-            changeSequence: row.change_sequence,
-          })
-        : null;
+      return row ? toRevision(row) : null;
+    },
+    list(snapshotSequence, afterSequence, limit) {
+      return session
+        .query<RevisionRow>(
+          `SELECT r.* FROM revisions r
+         WHERE r.change_sequence > ? AND r.change_sequence <= ?
+           AND NOT EXISTS (
+             SELECT 1 FROM revisions newer
+             WHERE newer.memory_id = r.memory_id
+               AND newer.revision > r.revision AND newer.change_sequence <= ?
+           )
+         ORDER BY r.change_sequence ASC LIMIT ?`,
+          afterSequence,
+          snapshotSequence,
+          snapshotSequence,
+          limit,
+        )
+        .map(toRevision);
     },
     append(revision) {
       session.query(

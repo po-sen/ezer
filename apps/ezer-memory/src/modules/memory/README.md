@@ -12,6 +12,7 @@ including traceable corrections and ordered changes within that individual.
 - Require a correction reason and matching expected revision when revising a record.
 - Maintain the individual's change sequence and operation receipts so writes are
   ordered and completed retries return the original result.
+- List bounded previews at a stable revision snapshot and enforce content grants.
 - Read a record's latest or requested revision and expose detached views through
   inbound contracts.
 - Own memory storage isolation, transaction boundaries, and adapter-specific
@@ -35,9 +36,10 @@ reads or writes these tables directly.
 
 The [inbound ports](ports/inbound/index.ts) define commands, queries, and
 detached views. The context's [public index](index.ts) exposes selected inbound
-contracts. `ConnectMemory` resolves an authorized logical ID through Memory's own
-access gateway. It has no authorization-server metadata or protocol settings. `CommitMemory` and
-`InspectMemory` serve internal persistence operations; `InspectMemoryState` reads
+contracts. `ConnectMemory` resolves an authorized logical ID and content capabilities
+through Memory's own access gateway. It has no authorization-server metadata or protocol settings. `CommitMemory` and
+`InspectMemory` serve internal persistence operations; `ListMemories` selects bounded
+previews at a fixed sequence in one Unit of Work; `InspectMemoryState` reads
 the current sequence. `DescribeMemoryBinding`
 resolves metadata for an already-authorized logical ID, and `DescribeMemoryService`
 reports service capabilities. Exporting a contract does not expose it over MCP.
@@ -49,7 +51,8 @@ implements this port and is the only Memory adapter allowed to import
 [Access's inbound index](../access/ports/inbound/index.ts). Root context barrels
 are not allowed cross-context import paths, even for type-only imports.
 
-The ACL copies authorized IDs, translates Access decisions into Memory denials,
+The ACL copies authorized IDs, maps Access content grants into Memory capabilities,
+translates Access decisions into Memory denials,
 and masks foreign exceptions. It neither re-exports Access contracts nor makes
 authorization decisions. Memory's application validates the returned ID and maps
 gateway outcomes to its own detached inbound view. Delivery then maps Memory's
@@ -74,18 +77,29 @@ of that one-way adapter; it does not permit Access to call back into Memory.
 Any future reverse integration needs a separate consumer-owned ACL and a review
 of dependency cycles. Neither direction can share a database transaction.
 
-Authenticated MCP currently exposes service information and the authorized
-individual's ID/change sequence, but no memory contents or mutations. Storage
-use cases do not authenticate callers; delivery must obtain the authorized ID
-through `ConnectMemory` before selecting an individual's storage.
+Authenticated MCP exposes service information, identity, and scoped memory tools.
+`MemoryOperations` captures a detached `MemoryConnection` and enforces its `read`
+and `write` capabilities before invoking the context's `MemoryPersistence` outbound
+port. Tool requests carry no individual selector. That port describes logical
+routing and detached content; its DO adapter delegates to the selected object's
+internal use cases and removes storage-local identity. Application maps results
+into public views using the authorized logical ID. HTTP obtains a fresh connection
+through `ConnectMemory` on every request; no grant is cached across requests.
+
+`ListMemories` owns page bounds (default 10, maximum 50) and 160-character previews.
+The first page fixes a sequence, later pages return each memory's latest revision
+at that sequence ordered by revision change sequence. New writes and corrections
+do not shift subsequent pages. Cursors hold sequence positions only; they neither
+authorize access nor select an individual. SQL selection belongs independently to
+each persistence adapter, using existing immutable history without a migration.
 
 ## Outside this context
 
 Memory does not choose what the agent remembers, define personality, infer
 emotions, or provide semantic search. Caller authentication and subject bindings
 belong to Access. Memory does not issue credentials, own another context's data,
-or coordinate cross-context transactions. Public memory-content tools and
-standalone SQLite/PostgreSQL serving deployments remain future work.
+or coordinate cross-context transactions. Keyword/semantic retrieval, startup
+recovery, and standalone SQLite/PostgreSQL serving deployments remain future work.
 
 ## Architecture correspondence
 

@@ -3,6 +3,7 @@ import type {
   CommitMemory,
   InspectMemory,
   InspectMemoryState,
+  ListMemories,
 } from "../ports/inbound/index.ts";
 
 const content = {
@@ -24,12 +25,35 @@ const read = z.strictObject({
   memoryId: z.string(),
   revision: z.number().optional(),
 });
+const page = z.strictObject({
+  limit: z.number().optional(),
+  cursor: z
+    .strictObject({ snapshotSequence: z.number(), afterSequence: z.number() })
+    .optional(),
+});
 export function createMemoryRpcHandler(
   commit: CommitMemory,
   inspect: InspectMemory,
   state: InspectMemoryState,
+  list: ListMemories,
 ) {
   return {
+    list(input: unknown) {
+      const parsed = page.safeParse(input);
+      if (!parsed.success) return { ok: false, code: "INVALID_INPUT" } as const;
+      try {
+        return list.execute({
+          ...(parsed.data.limit === undefined
+            ? {}
+            : { limit: parsed.data.limit }),
+          ...(parsed.data.cursor === undefined
+            ? {}
+            : { cursor: parsed.data.cursor }),
+        });
+      } catch {
+        return { ok: false, code: "INTERNAL_ERROR" } as const;
+      }
+    },
     inspectState() {
       try {
         return state.execute();

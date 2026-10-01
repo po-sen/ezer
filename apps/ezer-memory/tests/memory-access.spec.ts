@@ -9,7 +9,10 @@ function provider(): AccessControl {
   return {
     authorize: async () => ({
       ok: true,
-      individual: { individualId: "ezer-alice" },
+      individual: {
+        individualId: "ezer-alice",
+        capabilities: { readMemory: false, writeMemory: false },
+      },
     }),
   };
 }
@@ -19,6 +22,7 @@ describe("Memory's consumer-owned Access ACL", () => {
     const individual = {
       individualId: "ezer-alice",
       providerDetail: "synthetic principal",
+      capabilities: { readMemory: false, writeMemory: false },
     };
     const access: AccessControl = {
       authorize: async () => ({ ok: true, individual }),
@@ -29,6 +33,7 @@ describe("Memory's consumer-owned Access ACL", () => {
     expect(result).toEqual({
       status: "authorized",
       individualId: "ezer-alice",
+      capabilities: { read: false, write: false },
     });
   });
 
@@ -41,6 +46,7 @@ describe("Memory's consumer-owned Access ACL", () => {
       expect(await gateway.resolveIndividual(credential)).toEqual({
         status: "authorized",
         individualId: "ezer-alice",
+        capabilities: { read: false, write: false },
       });
       expect(authorize).toHaveBeenCalledExactlyOnceWith(credential);
     },
@@ -71,6 +77,37 @@ describe("Memory's consumer-owned Access ACL", () => {
     },
   );
 
+  it.each([
+    [true, false],
+    [false, true],
+    [true, true],
+  ])(
+    "translates and detaches read=%s write=%s grants",
+    async (readMemory, writeMemory) => {
+      const capabilities = {
+        readMemory,
+        writeMemory,
+        foreignDetail: "ignored",
+      };
+      const access: AccessControl = {
+        authorize: async () => ({
+          ok: true,
+          individual: { individualId: "ezer-alice", capabilities },
+        }),
+      };
+      const result = await createConnectMemory(
+        createMemoryAccessGateway(access),
+      ).execute("synthetic");
+      capabilities.readMemory = false;
+      capabilities.writeMemory = false;
+      expect(result).toEqual({
+        ok: true,
+        individualId: "ezer-alice",
+        capabilities: { read: readMemory, write: writeMemory },
+      });
+    },
+  );
+
   it("masks foreign exceptions", async () => {
     const access = provider();
     access.authorize = async () => {
@@ -88,6 +125,7 @@ describe("Memory connection use case", () => {
     const identity = {
       status: "authorized" as const,
       individualId: "ezer-alice",
+      capabilities: { read: false, write: false },
     };
     const gateway: MemoryAccessGateway = {
       resolveIndividual: async () => identity,
@@ -95,7 +133,11 @@ describe("Memory connection use case", () => {
     const connection = createConnectMemory(gateway);
     const result = await connection.execute(null);
     identity.individualId = "ezer-bob";
-    expect(result).toEqual({ ok: true, individualId: "ezer-alice" });
+    expect(result).toEqual({
+      ok: true,
+      individualId: "ezer-alice",
+      capabilities: { read: false, write: false },
+    });
   });
 
   it.each([
@@ -133,7 +175,10 @@ describe("Memory connection use case", () => {
       const access = provider();
       access.authorize = async () => ({
         ok: true,
-        individual: { individualId },
+        individual: {
+          individualId,
+          capabilities: { readMemory: false, writeMemory: false },
+        },
       });
       const mcp = vi.fn(() => ({
         fetch: async () => new Response("unexpected"),
@@ -145,6 +190,8 @@ describe("Memory connection use case", () => {
           resource: "https://memory.test/mcp",
           authorizationServer: "https://issuer.test/",
           connectionScope: "ezer:connect",
+          readScope: "ezer:memory:read",
+          writeScope: "ezer:memory:write",
         },
       );
       const response = await handler(new Request("https://memory.test/mcp"));

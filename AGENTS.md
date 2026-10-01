@@ -4,9 +4,9 @@
 
 Ezer is an early-stage plugin project using Agent Skills and MCP. The planned
 memory service uses TypeScript on Cloudflare Workers. Its authenticated MCP endpoint
-exposes service information and authorized Ezer identity metadata. An internal
-SQLite-backed Durable Object implements memory persistence; public memory
-read/write tools and authorization-provider provisioning are not implemented.
+exposes service information, authorized Ezer identity metadata, and scoped memory
+creation, reading, correction, and listing. A SQLite-backed Durable Object implements
+memory persistence; authorization-provider provisioning is not implemented.
 Keep product behavior portable across compatible host agents.
 These instructions guide repository development, not Ezer's runtime personality.
 
@@ -53,8 +53,11 @@ Service commands are available with `pnpm --filter @ezer/memory run <command>`:
 `migrate:postgresql`, and `test:postgresql`. The full check requires the dedicated
 PostgreSQL test service described in the service README. Persistence tests
 use synthetic data through the internal `EZER_MEMORY` binding. Public identity
-lookup may read only the server-authorized object's change sequence. Keep memory
-contents and mutations off public HTTP/MCP until their scoped tools are implemented.
+lookup may read only the server-authorized object's change sequence. Memory tools
+must use the connection's server-authorized logical identity and separate read/write
+grants. Never accept a client-selected individual or native storage ID. Memory's
+application enforces these grants before calling its persistence port; HTTP delivery
+reauthorizes every request, and connection permission alone grants no content access.
 Worker declarations are generated with `wrangler types`; commit the output after
 configuration, export, or Wrangler changes. Never hand-edit or format
 `apps/ezer-memory/worker-configuration.d.ts`. The full check rejects stale types
@@ -169,7 +172,7 @@ ports, application, domain, or delivery. Validate declaration origins as well as
 import paths so aliases and barrels cannot bypass this boundary. Bootstrap may
 compose both contexts and the ACL; it must not perform contract translation.
 
-Access owns verified callers, connection permission, and caller-to-individual
+Access owns verified callers, connection/read/write permissions, and caller-to-individual
 assignments. Its `CredentialVerifier` port accepts opaque proof and returns
 Access-owned facts. JWT algorithms, issuer/audience checks, JWKS URLs, key caching,
 and scope-to-permission translation stay in the JWT adapter. The deployment
@@ -178,7 +181,7 @@ the selected adapters; it cannot import context implementations. OAuth discovery
 and protocol errors belong to HTTP delivery, not Access or Memory inner contracts.
 Memory's `infrastructure/acl/access/` is the only
 registered cross-context adapter and imports Access's `ports/inbound/index.ts`.
-It translates Access results into Memory's own outbound contract. Memory delivery
+It translates Access decisions and capabilities into Memory's own outbound contract. Memory delivery
 uses its own inbound connection use case; it never imports Access. The dependency
 is one-way, Memory to Access: mapping responses does not create a reverse
 dependency. A reverse integration needs its own consumer-owned ACL and an explicit

@@ -4,8 +4,8 @@ This package implements Ezer's independent memory service in TypeScript on
 Cloudflare Workers. The MCP endpoint requires an authorized connection.
 An internal SQLite-backed Durable Object stores sourced text memories and their
 revision history. OAuth JWT access-token validation and Ezer identity binding are
-implemented. Public memory read/write tools, login-provider provisioning, model
-invocation, and cloud deployment are not implemented.
+implemented, along with scoped MCP memory tools. Login-provider provisioning,
+model invocation, and cloud deployment are not implemented.
 
 ## Development
 
@@ -35,16 +35,17 @@ configuration; a real deployment requires a separate, authorized setup.
   legacy stateless clients use the same tool registration. Request bodies are
   limited to 64 KiB; browser requests with a foreign Origin are rejected.
 - `ezer_service_info` takes no arguments and reports the service version, its
-  `foundation` stage, and disabled memory read/write capabilities.
+  `foundation` stage, and available memory read/write capabilities. These report
+  implementation availability, not the caller's granted permissions.
 - `ezer_identity` takes no arguments and returns the bound logical `individualId`
   and current `changeSequence`. It never returns memory contents, the principal,
   credentials, or a Cloudflare object ID.
 - `GET /.well-known/oauth-protected-resource/mcp` publishes the configured OAuth
-  resource, issuer, and required `ezer:connect` scope without authentication.
+  resource, issuer, and supported connection/read/write scopes without authentication.
 
 Every MCP request is authenticated before protocol/body parsing. Protocol sessions
-never determine durable identity. Memory contents and mutations remain private to
-the internal binding; identity lookup reads only the authorized object's sequence.
+never determine durable identity. Identity lookup reads only the authorized object's
+sequence. Content tools enforce read/write grants before invoking persistence.
 The current tests use synthetic MCP clients; native plugin installation and real
 Codex/Claude Code compatibility still require separate acceptance tests.
 
@@ -61,7 +62,8 @@ Its configuration and JWT adapters are independent and consume only outbound por
 No account database or custom login/token-issuing protocol is introduced.
 
 Context contracts use their own language. Access accepts opaque credentials and
-works with verified callers, `connect` permission, and individual assignments.
+works with verified callers, `connect`, `read-memory`, and `write-memory` permissions,
+and individual assignments.
 Memory works with individual connection grants and its own denial codes. JWT/JWKS
 settings, OAuth claims, discovery metadata, and protocol error names are confined
 to adapters and HTTP delivery. The service-level `src/configuration/` module
@@ -115,8 +117,9 @@ The first identity lookup may initialize that object's internal memory schema.
 Changing agents, tokens, subjects, or sessions does not change this mapping.
 Preserve the ID, routing prefix, and DO namespace across deployments. Changing an
 ID selects a different object; it is not a rename or migration. Internal RPC
-receipts retain their storage-local object IDs; public identity uses the logical
-ID. Existing randomly addressed test objects are not automatically adopted.
+receipts retain their storage-local object IDs; every public memory result uses the
+logical ID. The DO adapter removes native identity before returning through its
+Memory-owned persistence port, and application constructs detached public views. Existing randomly addressed test objects are not automatically adopted.
 
 Each deployment can operate independently. To give one principal multiple Ezers,
 use separate service endpoints/deployments with distinct OAuth resource audiences
@@ -250,21 +253,70 @@ validates wire input and translates use-case results. Bootstrap owns composition
 not business policy. The architecture tests enforce the current import allowlist;
 runtime coupling still needs review.
 
+## Scoped memory tools
+
+All tools operate on the Ezer authorized for the current request. Their strict
+input schemas reject individual IDs, ownership selectors, and extra fields.
+The host obtains content scopes from the external authorization provider; the
+agent cannot request a grant by putting it in tool arguments.
+
+| Tool            | Input                                             | Required scope      | Result                                                              |
+| --------------- | ------------------------------------------------- | ------------------- | ------------------------------------------------------------------- |
+| `ezer_remember` | `operationId`, `memoryId`, `body`, `source`       | `ezer:memory:write` | Immutable revision 1 and a write receipt.                           |
+| `ezer_read`     | `memoryId`, optional `revision`                   | `ezer:memory:read`  | Full content, source, correction reason, and revision metadata.     |
+| `ezer_revise`   | Write fields plus `expectedRevision` and `reason` | `ezer:memory:write` | A new revision if the expected version is current.                  |
+| `ezer_list`     | Optional `limit` and `cursor`                     | `ezer:memory:read`  | Bounded previews with IDs, revisions, timestamps, and `nextCursor`. |
+
+Every request also requires `ezer:connect`. Read and write are independent: write
+permission does not grant reading, and connection permission grants neither.
+Missing content permission returns an MCP tool error (`READ_NOT_GRANTED` or
+`WRITE_NOT_GRANTED`) without accessing storage. Authentication and connection
+denials still occur at the HTTP boundary. All tools remain discoverable so clients
+can inspect their contracts; advertised service capabilities do not imply grants.
+
+Successful tools return the same detached data in `structuredContent` and JSON text.
+Operational failures set `isError` with a bounded Memory error code, without raw
+SQL/provider diagnostics. Input-schema errors come from the MCP SDK. The existing
+source, size, revision, and retry rules described under internal persistence apply.
+After an uncertain write, retry the identical payload and operation ID. After a
+revision conflict, read the latest revision and choose a new operation ID for any
+new correction. Retrying an already successful operation returns its original
+receipt, even after subsequent corrections.
+
+Listing defaults to 10 records, permits 1-50, and includes at most 160 UTF-16 code
+units of each body's preview. The first page captures the individual's change
+sequence. Pages select the latest revision of each memory at that sequence,
+ordered by that revision's increasing change sequence. `nextCursor` contains
+`snapshotSequence` and `afterSequence`; supply it unchanged for the next page.
+A null cursor ends the listing. Start again without a cursor to see newer writes.
+To read the content shown in a preview, request its explicit revision; an unversioned
+read returns the current revision, which may have changed since the listing.
+
+Cursors are validated query positions, not credentials, sessions, or individual
+selectors. They cannot route to another Ezer. They contain no physical row IDs or
+SQL details, require no schema migration, and rely on immutable revision history.
+Changing the page size does not change the snapshot. Empty history returns an empty
+page and null cursor. This is basic enumeration, not keyword/semantic search or a
+production-scale query-performance guarantee.
+
 ## Internal persistence
 
 `EZER_MEMORY` is a Worker binding, not a public endpoint. Each object owns one
 SQLite database and persists its object ID as its internal individual identity.
-Callers holding the binding select the object; `commit` and `inspect` accept no
+Callers holding the binding select the object; `commit`, `inspect`, and `list` accept no
 individual, owner, session, or database selector. Storage isolation is not user
 authorization. The authenticated identity adapter selects the object using only
-the server-authorized logical ID. Future memory tools must use that same boundary,
-never an unchecked client-supplied individual ID.
+the server-authorized logical ID. Public memory operations use that same boundary,
+never an unchecked client-supplied individual ID. `MemoryOperations` enforces its
+connection's read/write capabilities before using `MemoryPersistence`; internal
+`CommitMemory`, `InspectMemory`, and `ListMemories` run inside the selected object.
 
 The internal RPC contract is provisional and is not the released plugin/MCP
 contract. Its methods return `{ ok: true, value }` or `{ ok: false, code }`:
 
 | Method                                                                                      | Behavior                                                                                                                                                             |
 | ------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `list({ limit?, cursor? })`                                                                 | List latest-at-snapshot previews in one Unit of Work.                                                                                                                |
 | `inspectState()`                                                                            | Read only the current change sequence for the bound object's identity metadata.                                                                                      |
 | `commit({ kind: "remember", operationId, memoryId, body, source })`                         | Create revision 1 of a new memory. Reusing a memory ID with a new operation returns `ALREADY_EXISTS`.                                                                |
 | `commit({ kind: "revise", operationId, memoryId, expectedRevision, body, source, reason })` | Append an immutable revision if the current version matches. Missing memories return `NOT_FOUND`; stale versions return `REVISION_CONFLICT`.                         |
@@ -310,7 +362,8 @@ directory. DO uses `000001_name.up.sql` / `.down.sql`; SQLite uses Postgrator's
 `000001.do.name.sql` / `.undo.sql`; PostgreSQL uses node-pg-migrate's native paired
 `.up.sql` / `.down.sql` loader. DO and SQLite also have generated bundles.
 Renaming SQLite's unreleased baseline to Postgrator's format preserves its SQL bytes.
-DO's baseline SQL, checksum values, ledger key, and RPC contract are unchanged. The active Worker's runner reads only
+DO's baseline SQL, checksum values, and ledger key are unchanged; `list` extends
+the internal RPC contract without changing existing methods. The active Worker's runner reads only
 `src/modules/memory/infrastructure/persistence/durable-object/migrations/`.
 `durable-utils@0.3.7`, recommended in Cloudflare's migration documentation, owns
 SQL execution and the atomic native KV version ledger. The runner is not patched.
@@ -350,7 +403,8 @@ The identity is stable within its namespace across clients and object eviction.
 Cross-account migration and restore need an explicit identity/epoch strategy;
 this first schema is not an import format. Permanent deletion, export, restore,
 epoch handling, inference dependencies, and semantic search are not implemented.
-Reads are currently by memory ID and optional revision only.
+Reading uses a memory ID and optional revision; listing provides bounded previews.
+Keyword and semantic search are not implemented.
 
 The Workers tests use isolated synthetic databases. They verify actual SQLite
 rollback by forcing operation-receipt insertion to fail after revision insertion,
@@ -444,8 +498,7 @@ All test data is disposable; the test container must be removed when finished.
 
 ## Next capabilities
 
-Add scoped private memory tools on MCP using the authenticated individual binding.
-`ezer:connect` authorizes identity lookup, not public memory content operations.
-Native provider login, plugin installation, and cross-computer
+Add retrieval and startup recovery, then connect the plugin skill to the public
+memory operations. Native provider login, plugin installation, and cross-computer
 continuity still require separate acceptance tests. R2 remains a later attachment
 candidate and is not bound or provisioned here.

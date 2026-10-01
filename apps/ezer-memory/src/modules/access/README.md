@@ -4,14 +4,14 @@
 
 Access determines whether a verified caller may connect to Ezer and which
 logical individual that caller is authorized to use. Its language is callers,
-connection permission, assignments, and authorization decisions. It does not define the
+connection/read/write permissions, assignments, and authorization decisions. It does not define the
 individual's personality or store its memories.
 
 ## Responsibilities
 
 - Obtain verified caller facts through an implementation-independent credential port.
 - Require connection permission and exactly one assignment for the caller.
-- Return the authorized logical individual ID without exposing credentials or
+- Return the authorized logical individual ID and explicit memory capabilities without exposing credentials or
   provider-specific claims to Memory.
 - Reject ambiguous assignments and recheck current assignment policy for each request.
 - Fail closed when policy is missing or invalid, and report bounded failure codes
@@ -23,7 +23,7 @@ individual's personality or store its memories.
 | ---------- | ------------------------------------------------------------------------------------------------------------ |
 | Credential | Opaque proof submitted by a caller. The application does not parse its format.                               |
 | Caller     | An identity established by the selected verifier. Its `callerId` is distinct from the Ezer individual ID.    |
-| Permission | The Access-owned `connect` capability. It does not grant future memory-content operations.                   |
+| Permission | Access owns `connect`, `read-memory`, and `write-memory`. None implies either of the others.                 |
 | Assignment | A server-owned mapping from one caller to one individual. Multiple callers may share the same individual.    |
 | Decision   | A granted individual or a bounded denial/unavailability result, independent of HTTP status and OAuth errors. |
 
@@ -40,7 +40,8 @@ exposes these contracts, but is not an allowed cross-context import path:
 
 - `AccessControl.authorize(credential)` returns the authorized logical individual or
   `UNRECOGNIZED_CREDENTIAL`, `UNASSIGNED_CALLER`, `MISSING_PERMISSION`, or `UNAVAILABLE`.
-- `AuthorizedIndividual` carries only `individualId` across the context boundary.
+- `AuthorizedIndividual` carries `individualId` and `readMemory`/`writeMemory`
+  capabilities across the context boundary. No provider claims are exported.
 
 Only [Memory](../memory/README.md)'s consumer-owned
 [Access ACL](../memory/infrastructure/acl/access/index.ts) consumes these contracts.
@@ -71,7 +72,12 @@ assignments and returns detached policy snapshots. The JWT adapter receives its
 issuer, audience, JWKS URL, and scope mapping through factory settings. Those
 values never pass through `AccessPolicy`, `CredentialVerifier`, or a use-case call.
 The adapter translates verified `sub` and `scope` claims into caller facts and the
-`connect` permission; key retrieval, algorithm selection, and caching stay there.
+`connect`, `read-memory`, and `write-memory` permissions. Deployment settings map
+these to exact `ezer:connect`, `ezer:memory:read`, and `ezer:memory:write` scope values.
+The application requires connection permission and derives the granted content
+capabilities. Memory's ACL translates them to its own `read`/`write` capabilities;
+Memory enforces them before each operation. Key retrieval, algorithm selection,
+and caching stay in the JWT adapter.
 
 OAuth discovery metadata goes directly from deployment settings to HTTP delivery.
 It is not an Access use case. Core tests use an opaque ticket and a synthetic

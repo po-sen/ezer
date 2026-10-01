@@ -28,7 +28,13 @@ export function createAccessControl(
           return { ok: false, code: "MISSING_PERMISSION" };
         return {
           ok: true,
-          individual: { individualId: assignments[0]!.individualId },
+          individual: {
+            individualId: assignments[0]!.individualId,
+            capabilities: {
+              readMemory: caller.permissions.includes("read-memory"),
+              writeMemory: caller.permissions.includes("write-memory"),
+            },
+          },
         };
       } catch {
         return { ok: false, code: "UNAVAILABLE" };

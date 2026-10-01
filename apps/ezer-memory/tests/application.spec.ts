@@ -4,6 +4,7 @@ import {
   createInspectMemory,
   createInspectMemoryState,
   createDescribeMemoryBinding,
+  createListMemories,
 } from "../src/modules/memory/application/index.ts";
 
 import { createMemoryRpcHandler } from "../src/modules/memory/delivery/index.ts";
@@ -37,6 +38,7 @@ function harness() {
       },
     },
     revisions: {
+      list: () => [],
       find: () => {
         calls.push("find");
         return null;
@@ -179,6 +181,7 @@ describe("memory application orchestration", () => {
           throw new Error("synthetic private diagnostic");
         },
       },
+      createListMemories(broken),
     );
     expect(await rpc.commit(command())).toEqual({
       ok: false,

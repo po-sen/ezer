@@ -5,6 +5,8 @@ import {
   createDescribeMemoryService,
   createInspectMemoryState,
   createDescribeMemoryBinding,
+  createListMemories,
+  createMemoryOperations,
 } from "../modules/memory/application/index.ts";
 
 import {
@@ -19,6 +21,7 @@ import {
   migrateMemory,
   createDurableObjectUnitOfWork,
   createMemoryStateReader,
+  createMemoryPersistence,
 } from "../modules/memory/infrastructure/persistence/durable-object/index.ts";
 
 import metadata from "../../package.json" with { type: "json" };
@@ -42,12 +45,16 @@ export function createWorker() {
             ),
           ),
         ),
-        (individualId) =>
+        (connection) =>
           createMemoryMcpHandler(
             describeService,
-            individualId,
+            connection.individualId,
             createDescribeMemoryBinding(
               createMemoryStateReader(env.EZER_MEMORY),
+            ),
+            createMemoryOperations(
+              connection,
+              createMemoryPersistence(env.EZER_MEMORY),
             ),
           ),
         configuration?.http,
@@ -72,6 +79,7 @@ export function createMemory(
       ),
       createInspectMemory(unitOfWork),
       createInspectMemoryState(unitOfWork),
+      createListMemories(unitOfWork),
     ),
   };
 }

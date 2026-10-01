@@ -72,6 +72,25 @@ it("exercises SQLite-owned migrations and Stores without the Durable Object adap
       });
       expect(revisions.find(revision.memoryId)).toEqual(revision);
       expect(operations.find("sqlite-operation")).toEqual(receipt);
+      const correction = {
+        ...revision,
+        revision: 2,
+        changeSequence: 2,
+        body: "Corrected",
+        reason: "New evidence",
+      };
+      const other = { ...revision, memoryId: "second", changeSequence: 3 };
+      storage.transactionSync(() => {
+        revisions.append(correction);
+        state.advance(1, 2);
+        revisions.append(other);
+        state.advance(2, 3);
+      });
+      expect(revisions.list(0, 0, 10)).toEqual([]);
+      expect(revisions.list(1, 0, 10)).toEqual([revision]);
+      expect(revisions.list(3, 0, 1)).toEqual([correction]);
+      expect(revisions.list(3, 2, 10)).toEqual([other]);
+      expect(revisions.list(3, 0, 10)).toEqual([correction, other]);
       expect(storage.kv.get("memory:schema-version")).toBeUndefined();
 
       for (const reversal of [...reversals].reverse())

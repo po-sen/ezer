@@ -3,12 +3,16 @@ import { z } from "zod";
 import type {
   DescribeMemoryService,
   DescribeMemoryBinding,
+  MemoryOperations,
 } from "../ports/inbound/index.ts";
+
+import { registerMemoryTools } from "./register-memory-tools.ts";
 
 export function createMemoryMcpHandler(
   describeService: DescribeMemoryService,
   individualId: string,
   binding: DescribeMemoryBinding,
+  memory: MemoryOperations,
 ) {
   return createMcpHandler(
     () => {
@@ -74,6 +78,7 @@ export function createMemoryMcpHandler(
         },
       );
 
+      registerMemoryTools(server, memory);
       return server;
     },
     { legacy: "stateless", maxRequestBodySize: 64 * 1024 },

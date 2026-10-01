@@ -14,9 +14,10 @@ is not yet available.
 ## Development
 
 The memory service uses TypeScript and targets Cloudflare Workers. The
-repository includes its MCP service foundation, an internal SQLite-backed Durable
-Object memory core, OAuth access-token validation, and development tooling. Public
-memory read/write tools and an end-user login deployment are not implemented yet. Installing the plugin will not require
+repository includes a SQLite-backed Durable Object memory core, OAuth access-token
+validation, and scoped MCP tools for sourced memories, corrections, reading, and
+pagination. An end-user login deployment and installable plugin release are not
+implemented yet. Installing the plugin will not require
 these development dependencies.
 
 Use Node.js 24 or later and pnpm 12.6.0, pinned in the root `packageManager`
@@ -131,8 +132,11 @@ The internal `EZER_MEMORY` binding supports sourced text memories, immutable
 revisions, atomic writes, and idempotent retries in isolated Durable Objects.
 Local tests cover concurrent corrections, rollback, recovery after object
 eviction, token validation, and authorized routing to isolated memory objects.
-MCP identity lookup can read only the bound object's change sequence; memory
-contents and mutations remain internal RPC operations.
+MCP identity lookup reads only the bound object's change sequence. `ezer_remember`,
+`ezer_read`, `ezer_revise`, and `ezer_list` expose scoped memory operations. Connection
+permission alone cannot read or write contents; all tools route through the same
+authorized identity. Pagination lists bounded previews at a stable sequence, and
+reading a listed revision retrieves its complete content and source.
 
 ```sh
 pnpm --filter @ezer/memory dev

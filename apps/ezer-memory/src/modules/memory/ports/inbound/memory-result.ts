@@ -1,4 +1,6 @@
 type MemoryFailureCode =
+  | "READ_NOT_GRANTED"
+  | "WRITE_NOT_GRANTED"
   | "INVALID_INPUT"
   | "ALREADY_EXISTS"
   | "NOT_FOUND"

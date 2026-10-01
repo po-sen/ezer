@@ -378,7 +378,7 @@ function responsibilityViolations(file: string, text: string): string[] {
     if (
       inner &&
       ts.isIdentifier(node) &&
-      /^(jwksUri|issuer|audience|scopes?|authorizationServer|connectionScope|JWT|JOSE|JWKS)$/i.test(
+      /^(jwksUri|issuer|audience|scopes?|authorizationServer|connectionScope|readScope|writeScope|JWT|JOSE|JWKS)$/i.test(
         node.text,
       )
     )
@@ -388,7 +388,7 @@ function responsibilityViolations(file: string, text: string): string[] {
     if (
       inner &&
       ts.isStringLiteralLike(node) &&
-      /^(ezer:connect|Bearer|at\+jwt|insufficient_scope|invalid_token|RS256|ES256)$/.test(
+      /^(ezer:connect|ezer:memory:read|ezer:memory:write|Bearer|at\+jwt|insufficient_scope|invalid_token|RS256|ES256)$/.test(
         node.text,
       )
     )
@@ -499,6 +499,14 @@ test("context contracts reject provider settings and protocol vocabulary", () =>
     [
       "modules/access/application/access.ts",
       'const permission = "ezer:connect";',
+    ],
+    [
+      "modules/memory/application/operations.ts",
+      'const permission = "ezer:memory:read";',
+    ],
+    [
+      "modules/access/ports/outbound/verifier.ts",
+      "interface Settings { writeScope: string }",
     ],
     [
       "modules/access/application/access.ts",

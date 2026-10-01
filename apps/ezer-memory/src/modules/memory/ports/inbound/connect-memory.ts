@@ -1,6 +1,8 @@
+import type { MemoryConnection } from "./memory-connection.ts";
+
 export interface ConnectMemory {
   execute(credential: string | null): Promise<
-    | { readonly ok: true; readonly individualId: string }
+    | ({ readonly ok: true } & MemoryConnection)
     | {
         readonly ok: false;
         readonly code:
