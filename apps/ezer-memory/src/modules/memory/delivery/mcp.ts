@@ -4,11 +4,10 @@ import type {
   DescribeMemoryService,
   DescribeMemoryBinding,
 } from "../ports/inbound/index.ts";
-import type { AuthorizedIndividual } from "../../access/index.ts";
 
 export function createMemoryMcpHandler(
   describeService: DescribeMemoryService,
-  individual: AuthorizedIndividual,
+  individualId: string,
   binding: DescribeMemoryBinding,
 ) {
   return createMcpHandler(
@@ -34,7 +33,7 @@ export function createMemoryMcpHandler(
         },
         async () => {
           try {
-            const result = await binding.execute(individual.individualId);
+            const result = await binding.execute(individualId);
             if (!result.ok)
               return {
                 isError: true,

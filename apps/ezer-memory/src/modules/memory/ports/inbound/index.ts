@@ -1,4 +1,5 @@
 export type { CommitMemory } from "./commit-memory.ts";
+export type { ConnectMemory } from "./connect-memory.ts";
 export type { DescribeMemoryService } from "./describe-service.ts";
 export type { InspectMemory } from "./inspect-memory.ts";
 export type { MemoryReceipt } from "./memory-receipt.ts";

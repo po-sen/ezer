@@ -22,7 +22,11 @@ function layerOf(file: string): string {
   return parts[2] === "ports" ? parts.slice(2, 4).join("/") : (parts[2] ?? "");
 }
 
-function violation(file: string, dependency: string): string | undefined {
+function violation(
+  file: string,
+  dependency: string,
+  resolvedDeclaration = false,
+): string | undefined {
   const target = dependency.startsWith(".")
     ? relative(sourceRoot, resolve(sourceRoot, dirname(file), dependency))
         .split(sep)
@@ -112,11 +116,12 @@ function violation(file: string, dependency: string): string | undefined {
       return "infrastructure cannot import a sibling directory";
   }
   if (!target.startsWith(`modules/${context}/`)) {
-    // Only the MCP/HTTP delivery boundary may consume Access's public contracts.
+    // Only the consumer-owned ACL may name the provider's explicit inbound API.
     if (
-      file.startsWith("modules/memory/delivery/") &&
-      (target.startsWith("modules/access/ports/inbound/") ||
-        ["modules/access/index", "modules/access/ports/index"].includes(target))
+      file.startsWith("modules/memory/infrastructure/acl/access/") &&
+      (resolvedDeclaration
+        ? target.startsWith("modules/access/ports/inbound/")
+        : target === "modules/access/ports/inbound/index")
     )
       return;
     return "cross-context dependency outside an explicit integration";
@@ -184,6 +189,16 @@ function importViolations(file: string, text: string): string[] {
       failures.push(`${file}: runtime imports are not allowed in this service`);
     }
     if (dependency !== undefined) {
+      if (
+        ts.isExportDeclaration(node) &&
+        file.startsWith("modules/memory/infrastructure/acl/access/") &&
+        dependency.startsWith(".") &&
+        relative(sourceRoot, resolve(sourceRoot, dirname(file), dependency))
+          .split(sep)
+          .join("/")
+          .startsWith("modules/access/")
+      )
+        failures.push(`${file}: an ACL must not re-export provider contracts`);
       const reason =
         pathViolation(file, dependency) ?? violation(file, dependency);
       if (reason) failures.push(`${file} -> ${dependency}: ${reason}`);
@@ -651,9 +666,20 @@ function provenanceViolations(program: ts.Program, path: string): string[] {
       if (!symbol) continue; // Type checking reports unresolved imports.
       for (const origin of new Set(importedOrigins(symbol, checker))) {
         if (!origin.startsWith(sourceRoot)) continue;
+        if (
+          ts.isExportDeclaration(node) &&
+          file.startsWith("modules/memory/infrastructure/acl/access/") &&
+          relative(sourceRoot, origin)
+            .split(sep)
+            .join("/")
+            .startsWith("modules/access/")
+        )
+          failures.push(
+            `${file}: an ACL must not re-export provider contracts`,
+          );
         let dependency = relative(dirname(path), origin).split(sep).join("/");
         if (!dependency.startsWith(".")) dependency = `./${dependency}`;
-        const reason = violation(file, dependency);
+        const reason = violation(file, dependency, true);
         if (reason)
           failures.push(
             `${file} resolves to ${relative(sourceRoot, origin)}: ${reason}`,
@@ -895,25 +921,130 @@ test("parent indexes cannot hide sibling adapters or reverse layer dependencies"
   }
 });
 
-test("access integrations expose only inbound contracts to memory delivery", () => {
+test("only Memory's Access ACL may import Access's explicit inbound API", () => {
+  const acl = "modules/memory/infrastructure/acl/access/adapter.ts";
   for (const [file, dependency] of [
     ["modules/memory/application/x.ts", "../../../access/index.ts"],
+    ["modules/memory/application/x.ts", "../../access/ports/inbound/index.ts"],
+    ["modules/memory/delivery/x.ts", "../../access/index.ts"],
+    ["modules/memory/delivery/x.ts", "../../access/ports/inbound/index.ts"],
     ["modules/memory/delivery/x.ts", "../../access/application/index.ts"],
     ["modules/memory/delivery/x.ts", "../../access/ports/outbound/index.ts"],
+    [
+      "modules/memory/ports/inbound/x.ts",
+      "../../../access/ports/inbound/index.ts",
+    ],
+    [
+      "modules/memory/ports/outbound/x.ts",
+      "../../../access/ports/inbound/index.ts",
+    ],
+    [
+      "modules/memory/infrastructure/acl/other/x.ts",
+      "../../../../access/ports/inbound/index.ts",
+    ],
+    [acl, "../../../../access/index.ts"],
+    [acl, "../../../../access/ports/index.ts"],
+    [acl, "../../../../access/ports/inbound/access-control.ts"],
+    [acl, "../../../../access/application/index.ts"],
+    [acl, "../../../../access/ports/outbound/index.ts"],
+    [acl, "../../../../access/infrastructure/configuration/index.ts"],
+    [acl, "../../persistence/durable-object/index.ts"],
     ["modules/access/application/x.ts", "../../memory/ports/inbound/index.ts"],
+    [
+      "modules/access/infrastructure/acl/memory/x.ts",
+      "../../../../memory/ports/inbound/index.ts",
+    ],
     ["modules/access/domain/x.ts", "jose"],
     ["modules/access/infrastructure/jwt/x.ts", "../configuration/index.ts"],
   ])
     assert(violation(file!, dependency!), file);
   assert.equal(
-    violation("modules/memory/delivery/http.ts", "../../access/index.ts"),
+    violation(acl, "../../../../access/ports/inbound/index.ts"),
     undefined,
   );
   assert.equal(
-    violation(
-      "modules/memory/delivery/http.ts",
-      "../../access/ports/inbound/access-control.ts",
-    ),
+    violation(acl, "../../../../access/ports/inbound/access-control.ts", true),
     undefined,
   );
+  for (const statement of [
+    'import type { AccessControl as Provider } from "../../access/ports/inbound/index.ts";',
+    'import type * as Access from "../../access/ports/inbound/index.ts";',
+    'type Provider = import("../../access/ports/inbound/index.ts").AccessControl;',
+    'export type { AccessControl } from "../../access/ports/inbound/index.ts";',
+  ])
+    assert(
+      importViolations("modules/memory/delivery/x.ts", statement).length > 0,
+    );
+  for (const statement of [
+    'export type { AccessControl } from "../../../../access/ports/inbound/index.ts";',
+    'export type * as Provider from "../../../../access/ports/inbound/index.ts";',
+  ])
+    assert(importViolations(acl, statement).length > 0);
+});
+
+test("barrels cannot conceal foreign contracts or implementations at the ACL boundary", () => {
+  const acl = "modules/memory/infrastructure/acl/access/adapter.ts";
+  const caller = "modules/memory/delivery/consumer.ts";
+  const sources = new Map<string, string>([
+    [
+      "modules/access/ports/inbound/access-control.ts",
+      "export interface AccessControl {}",
+    ],
+    [
+      "modules/access/application/private.ts",
+      "export interface PrivatePolicy {}",
+    ],
+    [
+      "modules/access/ports/inbound/index.ts",
+      'export type { AccessControl } from "./access-control.ts"; export type { PrivatePolicy } from "../../application/private.ts";',
+    ],
+    [
+      "modules/memory/ports/inbound/index.ts",
+      'export type { AccessControl as Hidden } from "../../../access/ports/inbound/index.ts";',
+    ],
+  ]);
+  for (const [file, statement] of [
+    [caller, 'import type { Hidden } from "../ports/inbound/index.ts";'],
+    [caller, 'import type * as Local from "../ports/inbound/index.ts";'],
+    [caller, 'type Hidden = import("../ports/inbound/index.ts").Hidden;'],
+    [caller, 'export type { Hidden } from "../ports/inbound/index.ts";'],
+    [
+      acl,
+      'import type { PrivatePolicy } from "../../../../access/ports/inbound/index.ts";',
+    ],
+    [
+      acl,
+      'import type * as Provider from "../../../../access/ports/inbound/index.ts";',
+    ],
+    [
+      acl,
+      'import type { AccessControl as Provider } from "../../../../access/ports/inbound/index.ts"; export type { Provider };',
+    ],
+  ]) {
+    const files = new Map(
+      [...sources, [file!, statement!] as const].map(([path, source]) => [
+        resolve(sourceRoot, path),
+        source,
+      ]),
+    );
+    const options: ts.CompilerOptions = {
+      module: ts.ModuleKind.ESNext,
+      moduleResolution: ts.ModuleResolutionKind.Bundler,
+      noEmit: true,
+      noLib: true,
+      types: [],
+    };
+    const host = ts.createCompilerHost(options);
+    host.fileExists = (path) => files.has(path);
+    host.readFile = (path) => files.get(path);
+    host.getSourceFile = (path, version) =>
+      files.has(path)
+        ? ts.createSourceFile(path, files.get(path)!, version, true)
+        : undefined;
+    const program = ts.createProgram([...files.keys()], options, host);
+    assert(
+      provenanceViolations(program, resolve(sourceRoot, file!)).length > 0,
+      statement,
+    );
+  }
 });

@@ -35,18 +35,36 @@ reads or writes these tables directly.
 
 The [inbound ports](ports/inbound/index.ts) define commands, queries, and
 detached views. The context's [public index](index.ts) exposes selected inbound
-contracts. `CommitMemory` and `InspectMemory` serve internal persistence
-operations; `InspectMemoryState` reads the current sequence. `DescribeMemoryBinding`
+contracts. `ConnectMemory` describes the connection resource and resolves an
+authorized logical ID through Memory's own access gateway. `CommitMemory` and
+`InspectMemory` serve internal persistence operations; `InspectMemoryState` reads
+the current sequence. `DescribeMemoryBinding`
 resolves metadata for an already-authorized logical ID, and `DescribeMemoryService`
 reports service capabilities. Exporting a contract does not expose it over MCP.
 
-Memory's HTTP/MCP delivery consumes [Access](../access/README.md)'s public inbound
-contract to authorize each MCP request before calling Memory use cases. The
-application and persistence layers do not depend on Access implementations.
+Memory's HTTP/MCP delivery uses its own `ConnectMemory` inbound contract before
+serving each MCP request. That use case depends on the `MemoryAccessGateway`
+outbound port. The consumer-owned [Access ACL](infrastructure/acl/access/index.ts)
+implements this port and is the only Memory adapter allowed to import
+[Access's inbound index](../access/ports/inbound/index.ts). Root context barrels
+are not allowed cross-context import paths, even for type-only imports.
+
+The ACL copies resource metadata and authorized IDs, translates denial codes,
+and masks foreign exceptions. It neither re-exports Access contracts nor makes
+authorization decisions. Memory's application validates the returned ID and maps
+gateway outcomes to its own detached inbound view. Delivery then maps Memory's
+results to HTTP/MCP; it never receives Access objects. Domain, application, ports,
+delivery, and persistence remain independent of Access types and implementations.
+
+The dependency is `Memory -> Access`. Translating requests and responses is part
+of that one-way adapter; it does not permit Access to call back into Memory.
+Any future reverse integration needs a separate consumer-owned ACL and a review
+of dependency cycles. Neither direction can share a database transaction.
+
 Authenticated MCP currently exposes service information and the authorized
-individual's ID/change sequence, but no memory contents or mutations. Internal
-use cases do not independently authenticate callers and must not become public
-routes without delivery-level authorization.
+individual's ID/change sequence, but no memory contents or mutations. Storage
+use cases do not authenticate callers; delivery must obtain the authorized ID
+through `ConnectMemory` before selecting an individual's storage.
 
 ## Outside this context
 
@@ -156,8 +174,9 @@ object's native ID remains internal. Identity lookup reads its current change
 sequence through a use case and Unit of Work, without exposing contents. Future
 persistent contexts must map the same logical ID to their own object/database.
 Namespace-specific object IDs are not a shared cross-context identity contract.
-Integration goes through provider inbound ports or explicit events, never another
-context's database. No cross-context transaction is introduced.
+Synchronous integration goes through the consumer's ACL and the provider's explicit
+inbound index, never another context's database. No cross-context transaction is
+introduced; event-based collaboration is not implemented.
 
 PostgreSQL is not currently a drop-in adapter: the synchronous Store and Unit of
 Work contracts reflect Durable Object SQLite's `transactionSync`. Supporting a

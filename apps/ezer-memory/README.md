@@ -51,8 +51,12 @@ Codex/Claude Code compatibility still require separate acceptance tests.
 ## Authorization and stable identity
 
 The Access bounded context validates a principal and resolves a server-owned Ezer
-binding. Memory's HTTP/MCP delivery is the only cross-context consumer, through
-Access's public inbound contracts. Access owns neither memory SQL nor transactions.
+binding. Memory's consumer-owned ACL is the only cross-context adapter and imports
+Access's explicit `ports/inbound/index.ts`. It implements Memory's outbound access
+gateway, translating provider results into Memory-owned contracts. HTTP/MCP delivery
+uses Memory's own inbound connection use case and never imports Access types.
+This is a one-way dependency from Memory to Access, with request/response mapping
+inside the ACL. Access owns neither memory SQL nor transactions.
 Its configuration and JWT adapters are independent and consume only outbound ports.
 No account database or custom login/token-issuing protocol is introduced.
 

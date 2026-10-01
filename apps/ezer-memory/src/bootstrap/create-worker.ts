@@ -1,5 +1,6 @@
 import {
   createCommitMemory,
+  createConnectMemory,
   createInspectMemory,
   createDescribeMemoryService,
   createInspectMemoryState,
@@ -12,6 +13,7 @@ import {
   createMemoryMcpHandler,
 } from "../modules/memory/delivery/index.ts";
 import { createRequestFingerprint } from "../modules/memory/infrastructure/index.ts";
+import { createMemoryAccessGateway } from "../modules/memory/infrastructure/acl/access/index.ts";
 import {
   initializeIndividual,
   migrateMemory,
@@ -30,14 +32,18 @@ export function createWorker() {
   return {
     fetch: (request: Request, env: Env) =>
       createMemoryHttpHandler(
-        createAccessControl(
-          createAccessPolicyReader(env.EZER_AUTHORIZATION),
-          verifier,
+        createConnectMemory(
+          createMemoryAccessGateway(
+            createAccessControl(
+              createAccessPolicyReader(env.EZER_AUTHORIZATION),
+              verifier,
+            ),
+          ),
         ),
-        (individual) =>
+        (individualId) =>
           createMemoryMcpHandler(
             describeService,
-            individual,
+            individualId,
             createDescribeMemoryBinding(
               createMemoryStateReader(env.EZER_MEMORY),
             ),

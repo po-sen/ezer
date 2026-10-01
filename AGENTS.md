@@ -145,10 +145,25 @@ and its ledger together. Never print connection details, SQL, raw provider error
 or private data from operational commands. Add layers when they have real responsibilities, not as empty scaffolding. Extend
 architecture checks when introducing a new context or allowed dependency.
 
+Cross-context calls go through a consumer-owned ACL implementing that consumer's
+outbound port. Only explicitly registered ACL adapters may import another
+context, and those imports must name `ports/inbound/index.ts`, including type
+imports. Do not use context-root or ports-root barrels for cross-context imports.
+Do not re-export provider contracts or leak provider types into the consumer's
+ports, application, domain, or delivery. Validate declaration origins as well as
+import paths so aliases and barrels cannot bypass this boundary. Bootstrap may
+compose both contexts and the ACL; it must not perform contract translation.
+
 Access owns external OAuth token validation and operator-configured
-subject-to-individual bindings. Only Memory's HTTP/MCP delivery may consume
-Access's public inbound contracts; do not couple their application, domain, or
-infrastructure implementations. Read policy through explicit Worker bindings,
+subject-to-individual bindings. Memory's `infrastructure/acl/access/` is the only
+registered cross-context adapter and imports Access's `ports/inbound/index.ts`.
+It translates Access results into Memory's own outbound contract. Memory delivery
+uses its own inbound connection use case; it never imports Access. The dependency
+is one-way, Memory to Access: mapping responses does not create a reverse
+dependency. A reverse integration needs its own consumer-owned ACL and an explicit
+architecture decision; do not introduce circular calls or shared transactions.
+ACLs do not duplicate authorization policy or access another context's storage.
+Read policy through explicit Worker bindings,
 not ambient process variables or environment files. An invalid or missing policy
 must fail closed. Credentials, session IDs, client labels, and unchecked individual
 IDs must never determine storage routing. The Durable Object adapter maps the

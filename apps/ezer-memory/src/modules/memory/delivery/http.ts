@@ -1,11 +1,8 @@
-import type {
-  AccessControl,
-  AuthorizedIndividual,
-} from "../../access/index.ts";
+import type { ConnectMemory } from "../ports/inbound/index.ts";
 
 export function createMemoryHttpHandler(
-  access: AccessControl,
-  mcp: (individual: AuthorizedIndividual) => {
+  connection: ConnectMemory,
+  mcp: (individualId: string) => {
     fetch(request: Request): Promise<Response>;
   },
 ) {
@@ -30,7 +27,7 @@ export function createMemoryHttpHandler(
     if (origin !== null && origin !== url.origin) {
       return new Response("Forbidden origin", { status: 403 });
     }
-    const description = access.describe();
+    const description = connection.describe();
     if (!description) {
       return Response.json(
         { error: "temporarily_unavailable" },
@@ -51,7 +48,7 @@ export function createMemoryHttpHandler(
       return Response.json(
         {
           resource: description.resource,
-          authorization_servers: [description.issuer],
+          authorization_servers: [description.authorizationServer],
           scopes_supported: ["ezer:connect"],
           bearer_methods_supported: ["header"],
         },
@@ -60,7 +57,7 @@ export function createMemoryHttpHandler(
     }
     const header = request.headers.get("Authorization");
     const token = header?.match(/^Bearer +([A-Za-z0-9._~-]+=*)$/i)?.[1] ?? null;
-    const result = await access.authorize(token);
+    const result = await connection.execute(token);
     const challenge = `Bearer resource_metadata="${resource.origin}${metadataPath}", scope="ezer:connect"`;
     if (!result.ok) {
       const status =
@@ -94,7 +91,7 @@ export function createMemoryHttpHandler(
         },
       );
     }
-    const upstream = await mcp(result.individual).fetch(request);
+    const upstream = await mcp(result.individualId).fetch(request);
     const response = new Response(upstream.body, upstream);
     response.headers.set("Cache-Control", "no-store");
     return response;

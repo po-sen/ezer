@@ -36,20 +36,26 @@ operator configuration changes, not actions available to the agent.
 
 ## Public contracts and collaboration
 
-The context's [public index](index.ts) exposes `AccessControl` and
-`AuthorizedIndividual` from its inbound ports:
+Cross-context consumers must explicitly import the
+[inbound port index](ports/inbound/index.ts). The context's root barrel also
+exposes these contracts, but is not an allowed cross-context import path:
 
 - `AccessControl.describe()` returns configured public issuer/resource metadata.
 - `AccessControl.authorize(token)` returns the authorized logical individual or
   `UNAUTHENTICATED`, `FORBIDDEN`, `INSUFFICIENT_SCOPE`, or `UNAVAILABLE`.
 - `AuthorizedIndividual` carries only `individualId` across the context boundary.
 
-Only [Memory](../memory/README.md)'s HTTP/MCP delivery consumes these contracts.
-Delivery extracts the credential, invokes Access, maps failure codes to HTTP,
-and passes the authorized ID into Memory's identity lookup. Memory owns storage
-routing and persistence; Access neither opens its database nor selects a Durable
-Object. Their application, domain, and infrastructure implementations remain
-independent, with no shared transaction.
+Only [Memory](../memory/README.md)'s consumer-owned
+[Access ACL](../memory/infrastructure/acl/access/index.ts) consumes these contracts.
+That adapter implements Memory's own outbound port, translating resource metadata,
+authorized identities, and denial codes into Memory-owned results. Access makes
+the authorization decision; the ACL does not repeat that policy. Memory delivery
+uses its own connection use case and never imports Access types.
+
+The dependency is one-way: Memory's ACL depends on Access's inbound API. Translating
+both requests and responses does not create a reverse dependency. Access does not
+import Memory, reuse its ACL, open its database, or select a Durable Object. There
+is no shared transaction. Bootstrap composes the two contexts through the adapter.
 
 Bootstrap composes the use case with `AccessPolicyReader` and
 `AccessTokenVerifier` outbound ports. The configuration and JWT adapters remain
