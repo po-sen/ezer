@@ -8,17 +8,18 @@ The host agent provides reasoning, while an independent memory service stores
 experiences. The agent decides what to remember and how to organize its memories
 through use.
 
-The project is in early development. A release for installation and deployment
-is not yet available.
+The project is in early development. The [plugin alpha](plugins/ezer/README.md)
+can be packaged for Codex and Claude Code with an operator-supplied memory endpoint.
+A deployed service and compatible end-user login are still required before use.
 
 ## Development
 
 The memory service uses TypeScript and targets Cloudflare Workers. The
 repository includes a SQLite-backed Durable Object memory core, OAuth access-token
 validation, and scoped MCP tools for sourced memories, corrections, reading, and
-pagination. An end-user login deployment and installable plugin release are not
-implemented yet. Installing the plugin will not require
-these development dependencies.
+pagination. The plugin includes startup recovery and agent-managed memory skills.
+An end-user login deployment is not provided yet. Installing a generated plugin
+does not require these development dependencies.
 
 Use Node.js 24 or later and pnpm 12.6.0, pinned in the root `packageManager`
 field. Install that pnpm version using the [official installation guide](https://pnpm.io/installation).
@@ -48,8 +49,11 @@ the first pnpm install. Do not retain or regenerate `package-lock.json`.
 `apps/ezer-memory/`. Each application owns its dependencies, configuration, tests,
 and domain boundaries. The root owns shared development commands and Git hooks.
 
-`plugins/` is reserved for installable plugin content; the current drafts remain
-local-only. Skills and MCP configuration do not need a JavaScript workspace
+`plugins/ezer/` contains shared plugin metadata and skill source. Run
+`pnpm plugin:package --help` to generate an instance package with native host
+manifests and an explicit remote MCP endpoint. Local architecture drafts and
+Python portability prototypes remain excluded from releases.
+Skills and MCP configuration do not need a JavaScript workspace
 unless they acquire a build step. Add `packages/` only when reusable code has an
 actual consumer, declare cross-package dependencies with `workspace:`, and import
 them through explicit package exports. DDD layers stay inside their owning
@@ -95,7 +99,7 @@ This checks all indexed paths before formatting supported tracked files, even
 when no changes are staged. It reads working-tree contents and excludes untracked
 drafts. Stage intended new files before running it; use `check:staged` to validate
 a partially staged commit. Neither command reformats files. The full check also
-runs service type checks, tests, and a local Worker bundle build. It requires the
+runs plugin packaging tests, service type checks, tests, and a local Worker bundle build. It requires the
 dedicated PostgreSQL test service described in the service README.
 
 GitHub Actions runs `Repository checks` on Node.js 24 for every PR targeting

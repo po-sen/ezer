@@ -9,7 +9,9 @@
   },
   "scripts": {
     "prepare": "husky",
-    "check": "node scripts/check-repository.ts && pnpm -r run check",
+    "check": "node scripts/check-repository.ts && pnpm run test:plugin && pnpm -r run check",
+    "plugin:package": "node scripts/package-plugin.ts",
+    "test:plugin": "node --test scripts/package-plugin.test.ts",
     "check:staged": "node scripts/check-staged-paths.ts && lint-staged --config .lintstagedrc.json",
     "format": "prettier --write",
     "format:check": "prettier --check"
