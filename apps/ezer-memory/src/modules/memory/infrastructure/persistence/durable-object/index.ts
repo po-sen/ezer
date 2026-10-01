@@ -9,3 +9,4 @@ export type { SqlSession } from "./session.ts";
 export type { SqlValue } from "./sql-value.ts";
 export { createDurableObjectUnitOfWork } from "./unit-of-work.ts";
 export { createMemoryStateReader } from "./create-memory-state-reader.ts";
+export { createMemoryPersistence } from "./create-memory-persistence.ts";

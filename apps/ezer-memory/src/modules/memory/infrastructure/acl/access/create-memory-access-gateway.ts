@@ -12,6 +12,10 @@ export function createMemoryAccessGateway(
           return {
             status: "authorized",
             individualId: result.individual.individualId,
+            capabilities: {
+              read: result.individual.capabilities.readMemory,
+              write: result.individual.capabilities.writeMemory,
+            },
           };
         switch (result.code) {
           case "UNRECOGNIZED_CREDENTIAL":

@@ -16,6 +16,9 @@ describe("Durable Object Unit of Work boundaries", () => {
           leaked = stores;
         });
         expect(() => leaked!.state.read()).toThrow("outside its Unit of Work");
+        expect(() => leaked!.revisions.list(0, 0, 10)).toThrow(
+          "outside its Unit of Work",
+        );
         uow.within(() => {
           expect(() => leaked!.state.read()).toThrow(
             "outside its Unit of Work",
@@ -30,6 +33,9 @@ describe("Durable Object Unit of Work boundaries", () => {
           }),
         ).toThrow(sentinel);
         expect(() => leaked!.state.read()).toThrow("outside its Unit of Work");
+        expect(() => leaked!.revisions.list(0, 0, 10)).toThrow(
+          "outside its Unit of Work",
+        );
         expect(uow.within((stores) => stores.state.read().changeSequence)).toBe(
           0,
         );

@@ -3,7 +3,9 @@ export interface CredentialVerifier {
     | {
         readonly status: "verified";
         readonly callerId: string;
-        readonly permissions: readonly "connect"[];
+        readonly permissions: readonly (
+          "connect" | "read-memory" | "write-memory"
+        )[];
       }
     | { readonly status: "unrecognized" }
     | { readonly status: "unavailable" }

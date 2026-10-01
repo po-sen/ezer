@@ -11,7 +11,14 @@ export function createConnectMemory(
         const result = await gateway.resolveIndividual(credential);
         if (result.status === "authorized") {
           validateMemoryId(result.individualId);
-          return { ok: true, individualId: result.individualId };
+          return {
+            ok: true,
+            individualId: result.individualId,
+            capabilities: {
+              read: result.capabilities.read,
+              write: result.capabilities.write,
+            },
+          };
         }
         if (result.status === "denied") {
           switch (result.reason) {

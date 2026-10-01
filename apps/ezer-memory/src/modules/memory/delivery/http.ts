@@ -1,9 +1,12 @@
-import type { ConnectMemory } from "../ports/inbound/index.ts";
+import type {
+  ConnectMemory,
+  MemoryConnection,
+} from "../ports/inbound/index.ts";
 import type { MemoryHttpSettings } from "./memory-http-settings.ts";
 
 export function createMemoryHttpHandler(
   connection: ConnectMemory,
-  mcp: (individualId: string) => {
+  mcp: (connection: MemoryConnection) => {
     fetch(request: Request): Promise<Response>;
   },
   settings: MemoryHttpSettings | undefined,
@@ -50,7 +53,11 @@ export function createMemoryHttpHandler(
         {
           resource: settings.resource,
           authorization_servers: [settings.authorizationServer],
-          scopes_supported: [settings.connectionScope],
+          scopes_supported: [
+            settings.connectionScope,
+            settings.readScope,
+            settings.writeScope,
+          ],
           bearer_methods_supported: ["header"],
         },
         { headers: { "Cache-Control": "no-store" } },
@@ -92,7 +99,7 @@ export function createMemoryHttpHandler(
         },
       );
     }
-    const upstream = await mcp(result.individualId).fetch(request);
+    const upstream = await mcp(result).fetch(request);
     const response = new Response(upstream.body, upstream);
     response.headers.set("Cache-Control", "no-store");
     return response;

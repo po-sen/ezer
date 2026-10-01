@@ -40,13 +40,17 @@ describe("Worker MCP boundary", () => {
     expect(invalid.headers.get("Allow")).toBe("GET");
   });
 
-  it("discovers and calls the service without claiming memory is implemented", async () => {
+  it("discovers service capabilities and the scoped memory tools", async () => {
     const client = await connectClient();
     try {
       const { tools } = await client.listTools();
       expect(tools.map((tool) => tool.name)).toEqual([
         "ezer_identity",
         "ezer_service_info",
+        "ezer_remember",
+        "ezer_read",
+        "ezer_revise",
+        "ezer_list",
       ]);
       const result = await client.callTool({
         name: "ezer_service_info",
@@ -56,7 +60,7 @@ describe("Worker MCP boundary", () => {
       expect(result.structuredContent).toMatchObject({
         name: "ezer-memory",
         stage: "foundation",
-        capabilities: { memoryRead: false, memoryWrite: false },
+        capabilities: { memoryRead: true, memoryWrite: true },
       });
     } finally {
       await client.close();
@@ -117,8 +121,8 @@ describe("Worker MCP boundary", () => {
       arguments: {},
     });
     expect(result.result.structuredContent.capabilities).toEqual({
-      memoryRead: false,
-      memoryWrite: false,
+      memoryRead: true,
+      memoryWrite: true,
     });
   });
 

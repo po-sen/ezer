@@ -18,6 +18,10 @@ export class EzerMemory extends DurableObject<Env> {
     return this.#memory.inspect(input);
   }
 
+  list(input: unknown) {
+    return this.#memory.list(input);
+  }
+
   inspectState() {
     return this.#memory.inspectState();
   }

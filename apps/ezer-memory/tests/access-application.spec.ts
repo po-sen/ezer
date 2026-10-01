@@ -20,7 +20,10 @@ describe("Access-owned authorization semantics", () => {
     const control = createAccessControl({ read: () => policy }, { verify });
     expect(await control.authorize("synthetic-ticket")).toEqual({
       ok: true,
-      individual: { individualId: "ezer-a" },
+      individual: {
+        individualId: "ezer-a",
+        capabilities: { readMemory: false, writeMemory: false },
+      },
     });
     expect(verify).toHaveBeenCalledExactlyOnceWith("synthetic-ticket");
   });

@@ -7,3 +7,4 @@ export type { RevisionStore } from "./revision-store.ts";
 export type { UnitOfWork } from "./unit-of-work.ts";
 export type { MemoryStateReader } from "./memory-state-reader.ts";
 export type { MemoryAccessGateway } from "./memory-access-gateway.ts";
+export type { MemoryPersistence } from "./memory-persistence.ts";

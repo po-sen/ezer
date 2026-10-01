@@ -6,6 +6,8 @@ interface JwtSettings {
   readonly audience: string;
   readonly jwksUri: string;
   readonly connectionScope: string;
+  readonly readScope: string;
+  readonly writeScope: string;
 }
 
 export function createCredentialVerifierFactory() {
@@ -62,11 +64,18 @@ export function createCredentialVerifierFactory() {
         return {
           status: "verified",
           callerId: payload.sub,
-          permissions:
+          permissions: (
+            [
+              [authority.connectionScope, "connect"],
+              [authority.readScope, "read-memory"],
+              [authority.writeScope, "write-memory"],
+            ] as const
+          ).flatMap(([scope, permission]) =>
             typeof payload.scope === "string" &&
-            payload.scope.split(" ").includes(authority.connectionScope)
-              ? ["connect"]
+            payload.scope.split(" ").includes(scope)
+              ? [permission]
               : [],
+          ),
         };
       } catch (error) {
         if (

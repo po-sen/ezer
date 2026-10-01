@@ -64,7 +64,11 @@ describe("authenticated Ezer identity", () => {
     expect(await metadata.json()).toEqual({
       resource: authority.policy.resource,
       authorization_servers: [authority.policy.issuer],
-      scopes_supported: ["ezer:connect"],
+      scopes_supported: [
+        "ezer:connect",
+        "ezer:memory:read",
+        "ezer:memory:write",
+      ],
       bearer_methods_supported: ["header"],
     });
     const denied = await authority.request(request());
@@ -440,7 +444,10 @@ describe("authenticated Ezer identity", () => {
     );
     expect(await access.authorize("synthetic")).toEqual({
       ok: true,
-      individual: { individualId: "ezer-bob" },
+      individual: {
+        individualId: "ezer-bob",
+        capabilities: { readMemory: false, writeMemory: false },
+      },
     });
     expect(await access.authorize(null)).toEqual({
       ok: false,
