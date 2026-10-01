@@ -1,17 +1,99 @@
 # Memory bounded context
 
-Memory owns sourced text revisions, correction invariants, individual change
-ordering, and operation receipts. It does not choose what an agent remembers,
-define personality, infer emotions, authorize callers, or provide semantic search.
-One bound Durable Object owns one individual's SQLite database. Public HTTP/MCP
-continues to expose service information only.
+## Domain
+
+Memory preserves an individual's sourced text records and their revision history.
+It provides reliable storage and retrieval of what the agent decides to remember,
+including traceable corrections and ordered changes within that individual.
+
+## Responsibilities
+
+- Create immutable memory revisions with a source reference and excerpt.
+- Require a correction reason and matching expected revision when revising a record.
+- Maintain the individual's change sequence and operation receipts so writes are
+  ordered and completed retries return the original result.
+- Read a record's latest or requested revision and expose detached views through
+  inbound contracts.
+- Own memory storage isolation, transaction boundaries, and adapter-specific
+  migrations, including metadata lookup for an authorized logical individual.
+
+## Core concepts and owned data
+
+| Concept           | Meaning and ownership                                                                                                 |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Individual        | The owner of an isolated memory history. Its public logical ID comes from Access; native storage IDs remain internal. |
+| Memory            | A sourced text record identified within one individual's history.                                                     |
+| Revision          | An immutable version of a memory, with its source, timestamp, and correction reason where applicable.                 |
+| Change sequence   | The individual's increasing order of accepted memory changes, separate from a record's revision number.               |
+| Operation receipt | A persisted write result used for retry idempotency; an operation ID cannot be reused for different content.          |
+
+Memory owns revision data, individual state, and operation receipts. One bound
+Durable Object currently owns one individual's SQLite database. No other context
+reads or writes these tables directly.
+
+## Public contracts and collaboration
+
+The [inbound ports](ports/inbound/index.ts) define commands, queries, and
+detached views. The context's [public index](index.ts) exposes selected inbound
+contracts. `ConnectMemory` resolves an authorized logical ID through Memory's own
+access gateway. It has no authorization-server metadata or protocol settings. `CommitMemory` and
+`InspectMemory` serve internal persistence operations; `InspectMemoryState` reads
+the current sequence. `DescribeMemoryBinding`
+resolves metadata for an already-authorized logical ID, and `DescribeMemoryService`
+reports service capabilities. Exporting a contract does not expose it over MCP.
+
+Memory's HTTP/MCP delivery uses its own `ConnectMemory` inbound contract before
+serving each MCP request. That use case depends on the `MemoryAccessGateway`
+outbound port. The consumer-owned [Access ACL](infrastructure/acl/access/index.ts)
+implements this port and is the only Memory adapter allowed to import
+[Access's inbound index](../access/ports/inbound/index.ts). Root context barrels
+are not allowed cross-context import paths, even for type-only imports.
+
+The ACL copies authorized IDs, translates Access decisions into Memory denials,
+and masks foreign exceptions. It neither re-exports Access contracts nor makes
+authorization decisions. Memory's application validates the returned ID and maps
+gateway outcomes to its own detached inbound view. Delivery then maps Memory's
+results to HTTP/MCP; it never receives Access objects. Domain, application, ports,
+delivery, and persistence remain independent of Access types and implementations.
+
+Memory's connection vocabulary is `IDENTITY_REQUIRED`, `INDIVIDUAL_NOT_GRANTED`,
+`CONNECTION_NOT_GRANTED`, and `UNAVAILABLE`. It does not use OAuth scope names or
+provider errors. HTTP delivery alone maps those outcomes to status codes and
+protocol challenges. Its `MemoryHttpSettings` receives discovery settings directly
+from service configuration; metadata does not travel through a Memory port or ACL.
+
+The persistence audit retains Memory-owned revisions, sequences, receipts, Store
+capabilities, and its synchronous atomic Unit of Work contract. SQL, schema names,
+driver values, and Cloudflare handles stay in persistence adapters. No physical
+schema or fingerprint format changes are part of this refactor. The existing
+asynchronous PostgreSQL serving limitation is described below; it is not hidden by
+exposing native transactions through a port.
+
+The dependency is `Memory -> Access`. Translating requests and responses is part
+of that one-way adapter; it does not permit Access to call back into Memory.
+Any future reverse integration needs a separate consumer-owned ACL and a review
+of dependency cycles. Neither direction can share a database transaction.
+
+Authenticated MCP currently exposes service information and the authorized
+individual's ID/change sequence, but no memory contents or mutations. Storage
+use cases do not authenticate callers; delivery must obtain the authorized ID
+through `ConnectMemory` before selecting an individual's storage.
+
+## Outside this context
+
+Memory does not choose what the agent remembers, define personality, infer
+emotions, or provide semantic search. Caller authentication and subject bindings
+belong to Access. Memory does not issue credentials, own another context's data,
+or coordinate cross-context transactions. Public memory-content tools and
+standalone SQLite/PostgreSQL serving deployments remain future work.
 
 ## Architecture correspondence
 
 The reference is Xerno AEP's
 [architecture at b4eaa1d](https://github.com/futurenestit/xerno/blob/b4eaa1d2e697d9664b3e6410bbd5af757d97406b/apps/agent-execution-platform/ARCHITECTURE.md).
-Its responsibilities and ownership rules apply here; its PostgreSQL, Go, process,
-and multi-context topology are not copied into this single-context Worker.
+Its responsibilities and ownership rules apply here; its PostgreSQL, Go, and
+process topology are not copied into this Worker. Access and Memory remain
+separate bounded contexts within the same application.
 
 | Reference rule                                       | Implementation                                                                                                                                                         | Evidence                                                                 |
 | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
@@ -88,21 +170,26 @@ each object's SQLite storage is private to that object. See the
 [SQLite ATTACH documentation](https://www.sqlite.org/lang_attach.html) and
 [workerd's attachment restriction](https://github.com/cloudflare/workerd/blob/main/src/workerd/util/sqlite.c%2B%2B).
 
-Only Memory exists today. Future SQLite contexts use separate databases (for
+Memory owns persistence; Access currently uses operator configuration rather than
+a database. Future SQLite contexts use separate databases (for
 Durable Objects, separate context-owned classes/namespaces and instances). The
 PostgreSQL deployment direction is one database per independently deployed Ezer,
 with one schema per context, context-owned migrations, and restricted runtime
 roles. A context needing independent deployment or data management can later use
 its own database. Transactions always stay within one context; cross-context SQL,
 foreign keys, and transactions are forbidden regardless of physical storage.
-Only the memory context is implemented. PostgreSQL memory Stores and service
+Only the Memory context has persistent storage. PostgreSQL memory Stores and service
 composition remain future work.
 
-For separate context-owned Durable Objects, a future logical Ezer identity must
-map to each context's object; namespace-specific object IDs are not a shared
-cross-context identity contract. Integration goes through provider inbound ports
-or explicit events, never another context's database. That topology and identity
-mapping are not implemented by this directory change.
+The public logical Ezer ID comes from Access's server-owned subject binding. The
+DO adapter maps it to `ezer:v1:<individualId>` inside the memory namespace; the
+object's native ID remains internal. Identity lookup reads its current change
+sequence through a use case and Unit of Work, without exposing contents. Future
+persistent contexts must map the same logical ID to their own object/database.
+Namespace-specific object IDs are not a shared cross-context identity contract.
+Synchronous integration goes through the consumer's ACL and the provider's explicit
+inbound index, never another context's database. No cross-context transaction is
+introduced; event-based collaboration is not implemented.
 
 PostgreSQL is not currently a drop-in adapter: the synchronous Store and Unit of
 Work contracts reflect Durable Object SQLite's `transactionSync`. Supporting a

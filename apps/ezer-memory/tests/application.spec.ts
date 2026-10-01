@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   createCommitMemory,
   createInspectMemory,
+  createInspectMemoryState,
+  createDescribeMemoryBinding,
 } from "../src/modules/memory/application/index.ts";
 
 import { createMemoryRpcHandler } from "../src/modules/memory/delivery/index.ts";
@@ -152,6 +154,10 @@ describe("memory application orchestration", () => {
     };
     const commit = createCommitMemory(failed, h.fingerprints, () => now);
     const inspect = createInspectMemory(failed);
+    expect(createInspectMemoryState(failed).execute()).toEqual({
+      ok: false,
+      code: "UNAVAILABLE",
+    });
     expect(await commit.execute(command())).toEqual({
       ok: false,
       code: "UNAVAILABLE",
@@ -168,6 +174,11 @@ describe("memory application orchestration", () => {
     const rpc = createMemoryRpcHandler(
       createCommitMemory(broken, h.fingerprints, () => now),
       createInspectMemory(broken),
+      {
+        execute: () => {
+          throw new Error("synthetic private diagnostic");
+        },
+      },
     );
     expect(await rpc.commit(command())).toEqual({
       ok: false,
@@ -177,6 +188,27 @@ describe("memory application orchestration", () => {
       ok: false,
       code: "INTERNAL_ERROR",
     });
+    expect(rpc.inspectState()).toEqual({ ok: false, code: "INTERNAL_ERROR" });
+  });
+
+  it("validates logical identity before resolving storage and masks binding failures", async () => {
+    let called = false;
+    const binding = createDescribeMemoryBinding({
+      read: async () => {
+        called = true;
+        throw new PersistenceFault();
+      },
+    });
+    expect(await binding.execute("../another-individual")).toEqual({
+      ok: false,
+      code: "INVALID_INPUT",
+    });
+    expect(called).toBe(false);
+    expect(await binding.execute("valid-individual")).toEqual({
+      ok: false,
+      code: "UNAVAILABLE",
+    });
+    expect(called).toBe(true);
   });
 
   it("keeps read views detached from stored domain values", () => {

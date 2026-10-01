@@ -15,8 +15,8 @@ is not yet available.
 
 The memory service uses TypeScript and targets Cloudflare Workers. The
 repository includes its MCP service foundation, an internal SQLite-backed Durable
-Object memory core, and development tooling. Public memory tools and
-authentication are not implemented yet. Installing the plugin will not require
+Object memory core, OAuth access-token validation, and development tooling. Public
+memory read/write tools and an end-user login deployment are not implemented yet. Installing the plugin will not require
 these development dependencies.
 
 Use Node.js 24 or later and pnpm 12.6.0, pinned in the root `packageManager`
@@ -121,14 +121,18 @@ replace review.
 ### Memory service development
 
 The [`ezer-memory` service](apps/ezer-memory/README.md) exposes `/health` and
-an HTTP MCP endpoint at `/mcp`. Its only tool is `ezer_service_info`, which reports
-the current foundation's capabilities without reading or writing memory.
+an authenticated HTTP MCP endpoint at `/mcp`. `ezer_service_info` reports the
+foundation's capabilities, and `ezer_identity` reports the authorized Ezer's stable
+ID and current memory change sequence. `/health` remains public. The default empty
+authorization policy disables MCP access until a deployment operator configures an
+external OAuth authority and subject-to-Ezer bindings; see the service README.
 
 The internal `EZER_MEMORY` binding supports sourced text memories, immutable
 revisions, atomic writes, and idempotent retries in isolated Durable Objects.
-Local tests cover concurrent corrections, rollback, and recovery after object
-eviction. This binding is not reachable through public HTTP or MCP; authentication
-and authorization must precede exposing private memories to host agents.
+Local tests cover concurrent corrections, rollback, recovery after object
+eviction, token validation, and authorized routing to isolated memory objects.
+MCP identity lookup can read only the bound object's change sequence; memory
+contents and mutations remain internal RPC operations.
 
 ```sh
 pnpm --filter @ezer/memory dev

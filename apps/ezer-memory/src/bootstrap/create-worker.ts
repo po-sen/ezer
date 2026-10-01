@@ -1,7 +1,10 @@
 import {
   createCommitMemory,
+  createConnectMemory,
   createInspectMemory,
   createDescribeMemoryService,
+  createInspectMemoryState,
+  createDescribeMemoryBinding,
 } from "../modules/memory/application/index.ts";
 
 import {
@@ -10,19 +13,47 @@ import {
   createMemoryMcpHandler,
 } from "../modules/memory/delivery/index.ts";
 import { createRequestFingerprint } from "../modules/memory/infrastructure/index.ts";
+import { createMemoryAccessGateway } from "../modules/memory/infrastructure/acl/access/index.ts";
 import {
   initializeIndividual,
   migrateMemory,
   createDurableObjectUnitOfWork,
+  createMemoryStateReader,
 } from "../modules/memory/infrastructure/persistence/durable-object/index.ts";
 
 import metadata from "../../package.json" with { type: "json" };
+import { readWorkerConfiguration } from "../configuration/index.ts";
+import { createAccessControl } from "../modules/access/application/index.ts";
+import { createAccessPolicyReader } from "../modules/access/infrastructure/configuration/index.ts";
+import { createCredentialVerifierFactory } from "../modules/access/infrastructure/jwt/index.ts";
 
-export function createWorker(): ExportedHandler {
+export function createWorker() {
   const describeService = createDescribeMemoryService(metadata.version);
+  const createVerifier = createCredentialVerifierFactory();
   return {
-    fetch: createMemoryHttpHandler(createMemoryMcpHandler(describeService)),
-  };
+    fetch: (request: Request, env: Env) => {
+      const configuration = readWorkerConfiguration(env.EZER_AUTHORIZATION);
+      return createMemoryHttpHandler(
+        createConnectMemory(
+          createMemoryAccessGateway(
+            createAccessControl(
+              createAccessPolicyReader(configuration?.bindings),
+              createVerifier(configuration?.jwt),
+            ),
+          ),
+        ),
+        (individualId) =>
+          createMemoryMcpHandler(
+            describeService,
+            individualId,
+            createDescribeMemoryBinding(
+              createMemoryStateReader(env.EZER_MEMORY),
+            ),
+          ),
+        configuration?.http,
+      )(request);
+    },
+  } satisfies ExportedHandler<Env>;
 }
 
 export function createMemory(
@@ -40,6 +71,7 @@ export function createMemory(
         new Date().toISOString(),
       ),
       createInspectMemory(unitOfWork),
+      createInspectMemoryState(unitOfWork),
     ),
   };
 }

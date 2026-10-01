@@ -1,8 +1,15 @@
 import { createMcpHandler, McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
-import type { DescribeMemoryService } from "../ports/inbound/index.ts";
+import type {
+  DescribeMemoryService,
+  DescribeMemoryBinding,
+} from "../ports/inbound/index.ts";
 
-export function createMemoryMcpHandler(describeService: DescribeMemoryService) {
+export function createMemoryMcpHandler(
+  describeService: DescribeMemoryService,
+  individualId: string,
+  binding: DescribeMemoryBinding,
+) {
   return createMcpHandler(
     () => {
       const description = describeService.execute();
@@ -10,6 +17,40 @@ export function createMemoryMcpHandler(describeService: DescribeMemoryService) {
         name: description.name,
         version: description.version,
       });
+
+      server.registerTool(
+        "ezer_identity",
+        {
+          description:
+            "Identify the Ezer bound to this authenticated connection. This is a stable identity, not a session or a personality summary.",
+          inputSchema: z.strictObject({}),
+          annotations: {
+            readOnlyHint: true,
+            destructiveHint: false,
+            idempotentHint: true,
+            openWorldHint: false,
+          },
+        },
+        async () => {
+          try {
+            const result = await binding.execute(individualId);
+            if (!result.ok)
+              return {
+                isError: true,
+                content: [{ type: "text", text: result.code }],
+              };
+            return {
+              content: [{ type: "text", text: JSON.stringify(result.value) }],
+              structuredContent: { ...result.value },
+            };
+          } catch {
+            return {
+              isError: true,
+              content: [{ type: "text", text: "INTERNAL_ERROR" }],
+            };
+          }
+        },
+      );
 
       server.registerTool(
         "ezer_service_info",

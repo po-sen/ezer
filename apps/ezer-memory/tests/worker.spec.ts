@@ -3,14 +3,23 @@ import {
   Client,
   StreamableHTTPClientTransport,
 } from "@modelcontextprotocol/client";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { createTestAuthority } from "./authorization/index.ts";
+
+afterEach(() => vi.restoreAllMocks());
 
 const endpoint = "https://ezer.test/mcp";
 
 async function connectClient() {
+  const authority = await createTestAuthority();
+  const token = await authority.sign();
   const client = new Client({ name: "ezer-test", version: "1.0.0" });
   const transport = new StreamableHTTPClientTransport(new URL(endpoint), {
-    fetch: (input, init) => exports.default.fetch(new Request(input, init)),
+    fetch: (input, init) => {
+      const request = new Request(input, init);
+      request.headers.set("Authorization", `Bearer ${token}`);
+      return authority.request(request);
+    },
   });
   await client.connect(transport);
   return client;
@@ -35,7 +44,10 @@ describe("Worker MCP boundary", () => {
     const client = await connectClient();
     try {
       const { tools } = await client.listTools();
-      expect(tools.map((tool) => tool.name)).toEqual(["ezer_service_info"]);
+      expect(tools.map((tool) => tool.name)).toEqual([
+        "ezer_identity",
+        "ezer_service_info",
+      ]);
       const result = await client.callTool({
         name: "ezer_service_info",
         arguments: {},
@@ -65,16 +77,21 @@ describe("Worker MCP boundary", () => {
   });
 
   it("also serves legacy stateless clients without treating sessions as memory", async () => {
+    const authority = await createTestAuthority();
+    const token = await authority.sign();
     async function request(method: string, params: Record<string, unknown>) {
-      const response = await exports.default.fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json, text/event-stream",
-          "MCP-Protocol-Version": "2025-11-25",
-        },
-        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-      });
+      const response = await authority.request(
+        new Request(endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json, text/event-stream",
+            "MCP-Protocol-Version": "2025-11-25",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+        }),
+      );
       expect(response.status).toBe(200);
       expect(response.headers.get("mcp-session-id")).toBeNull();
       const text = await response.text();
@@ -118,23 +135,31 @@ describe("Worker MCP boundary", () => {
   });
 
   it("bounds request bodies and rejects malformed protocol input", async () => {
-    const oversized = await exports.default.fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json, text/event-stream",
-      },
-      body: " ".repeat(64 * 1024 + 1),
-    });
+    const authority = await createTestAuthority();
+    const token = await authority.sign();
+    const oversized = await authority.request(
+      new Request(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json, text/event-stream",
+          Authorization: `Bearer ${token}`,
+        },
+        body: " ".repeat(64 * 1024 + 1),
+      }),
+    );
     expect(oversized.status).toBe(413);
-    const malformed = await exports.default.fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json, text/event-stream",
-      },
-      body: "{",
-    });
+    const malformed = await authority.request(
+      new Request(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json, text/event-stream",
+          Authorization: `Bearer ${token}`,
+        },
+        body: "{",
+      }),
+    );
     expect(malformed.status).toBe(400);
   });
 });

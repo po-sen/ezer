@@ -3,9 +3,10 @@
 ## Scope and working agreements
 
 Ezer is an early-stage plugin project using Agent Skills and MCP. The planned
-memory service uses TypeScript on Cloudflare Workers. Its public MCP endpoint
-exposes service information. An internal SQLite-backed Durable Object implements
-memory persistence; authentication and public memory tools are not implemented.
+memory service uses TypeScript on Cloudflare Workers. Its authenticated MCP endpoint
+exposes service information and authorized Ezer identity metadata. An internal
+SQLite-backed Durable Object implements memory persistence; public memory
+read/write tools and authorization-provider provisioning are not implemented.
 Keep product behavior portable across compatible host agents.
 These instructions guide repository development, not Ezer's runtime personality.
 
@@ -28,6 +29,8 @@ These instructions guide repository development, not Ezer's runtime personality.
 - `.husky/`: local pre-commit hook.
 - `.github/`: CI and pull request template.
 - `apps/ezer-memory/`: Worker entry point, memory context, and service tests.
+- `apps/ezer-memory/src/configuration/`: deployment syntax validation and adapter
+  settings; never a shared bounded-context model.
 - `pnpm-workspace.yaml`: workspace membership and dependency build permissions.
 - `AGENTS.md`: canonical instructions; `CLAUDE.md` imports this file.
 
@@ -49,8 +52,9 @@ Service commands are available with `pnpm --filter @ezer/memory run <command>`:
 `migrations:generate`, `migrations:check`, `migrate:sqlite`,
 `migrate:postgresql`, and `test:postgresql`. The full check requires the dedicated
 PostgreSQL test service described in the service README. Persistence tests
-use synthetic data through the internal `EZER_MEMORY` binding. Keep that binding
-off public HTTP/MCP routes until authentication and individual authorization exist.
+use synthetic data through the internal `EZER_MEMORY` binding. Public identity
+lookup may read only the server-authorized object's change sequence. Keep memory
+contents and mutations off public HTTP/MCP until their scoped tools are implemented.
 Worker declarations are generated with `wrangler types`; commit the output after
 configuration, export, or Wrangler changes. Never hand-edit or format
 `apps/ezer-memory/worker-configuration.d.ts`. The full check rejects stale types
@@ -106,8 +110,26 @@ SQLite's portable Stores and Node-only `sqlite/cli/` have separate indexes so Wo
 imports cannot pull in Node SQLite or migration packages.
 
 Organize service code by bounded context under `src/modules/`, with `ports/inbound/`
-and `ports/outbound/`. Keep domain models pure and place use
+and `ports/outbound/`. Every bounded context must have a root `README.md` that
+defines its domain, responsibilities, core concepts, and explicit non-responsibilities.
+Document its public contracts, collaboration with other contexts, owned data, and
+current implementation limits. Keep it aligned with code when responsibilities or
+boundaries change; distinguish implemented behavior from future plans.
+Keep domain models pure and place use
 cases behind inbound ports; external effects belong behind outbound ports.
+Each bounded context owns its vocabulary, decisions, inputs, and result types.
+Ports describe capabilities that the context needs, not how a provider implements
+them. Domain, application, and ports must not carry JWT/JWKS or OAuth discovery
+settings, wire claim names, provider error codes, SQL schemas, driver handles, or
+platform identities as platform-specific types. Renaming a provider field does
+not remove coupling: translate provider semantics at delivery, infrastructure, or
+the consumer-owned ACL. Configure implementation details through adapter factory
+arguments at composition time, never through a use-case request or inner port.
+Use independent context-owned contracts rather than aliases to another context's
+DTOs. Cover translation and replacement adapters with behavior tests, and extend
+architecture checks for newly discovered leaks. Synchronous transaction and
+idempotency guarantees are Memory contracts; changing them requires an explicit
+behavior design, not passing a provider transaction through a port.
 Delivery uses inbound ports, and bootstrap only composes implementations.
 Commands, queries, and detached views belong to inbound ports; domain types must
 not serve as wire contracts. A focused Unit of Work owns transaction demarcation;
@@ -137,6 +159,40 @@ commit individually. SQLite locks before reading history and commits pending SQL
 and its ledger together. Never print connection details, SQL, raw provider errors,
 or private data from operational commands. Add layers when they have real responsibilities, not as empty scaffolding. Extend
 architecture checks when introducing a new context or allowed dependency.
+
+Cross-context calls go through a consumer-owned ACL implementing that consumer's
+outbound port. Only explicitly registered ACL adapters may import another
+context, and those imports must name `ports/inbound/index.ts`, including type
+imports. Do not use context-root or ports-root barrels for cross-context imports.
+Do not re-export provider contracts or leak provider types into the consumer's
+ports, application, domain, or delivery. Validate declaration origins as well as
+import paths so aliases and barrels cannot bypass this boundary. Bootstrap may
+compose both contexts and the ACL; it must not perform contract translation.
+
+Access owns verified callers, connection permission, and caller-to-individual
+assignments. Its `CredentialVerifier` port accepts opaque proof and returns
+Access-owned facts. JWT algorithms, issuer/audience checks, JWKS URLs, key caching,
+and scope-to-permission translation stay in the JWT adapter. The deployment
+configuration module validates explicit Worker bindings and supplies settings to
+the selected adapters; it cannot import context implementations. OAuth discovery
+and protocol errors belong to HTTP delivery, not Access or Memory inner contracts.
+Memory's `infrastructure/acl/access/` is the only
+registered cross-context adapter and imports Access's `ports/inbound/index.ts`.
+It translates Access results into Memory's own outbound contract. Memory delivery
+uses its own inbound connection use case; it never imports Access. The dependency
+is one-way, Memory to Access: mapping responses does not create a reverse
+dependency. A reverse integration needs its own consumer-owned ACL and an explicit
+architecture decision; do not introduce circular calls or shared transactions.
+ACLs do not duplicate authorization policy or access another context's storage.
+Read policy through explicit Worker bindings,
+not ambient process variables or environment files. An invalid or missing policy
+must fail closed. Credentials, session IDs, client labels, and unchecked individual
+IDs must never determine storage routing. The Durable Object adapter maps the
+authorized logical ID to the stable name `ezer:v1:<individualId>`; changing that
+prefix or namespace requires an explicit data migration plan. Keep the logical ID
+separate from internal storage-local object IDs. Test JWTs and signing keys must be
+ephemeral synthetic data. Never add real credentials or a live provider dependency
+to CI; native login and remote compatibility require separate acceptance tests.
 
 ## TypeScript exports
 

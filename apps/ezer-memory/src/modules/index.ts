@@ -6,3 +6,4 @@ export type {
   MemoryResult,
   MemoryWrite,
 } from "./memory/index.ts";
+export type { AccessControl, AuthorizedIndividual } from "./access/index.ts";
