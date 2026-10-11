@@ -10,6 +10,7 @@ function provider(): AccessControl {
     authorize: async () => ({
       ok: true,
       individual: {
+        callerId: "caller-a",
         individualId: "ezer-alice",
         capabilities: { readMemory: false, writeMemory: false },
       },
@@ -20,6 +21,7 @@ function provider(): AccessControl {
 describe("Memory's consumer-owned Access ACL", () => {
   it("copies only identity fields owned by Memory", async () => {
     const individual = {
+      callerId: "caller-a",
       individualId: "ezer-alice",
       providerDetail: "synthetic principal",
       capabilities: { readMemory: false, writeMemory: false },
@@ -92,7 +94,11 @@ describe("Memory's consumer-owned Access ACL", () => {
       const access: AccessControl = {
         authorize: async () => ({
           ok: true,
-          individual: { individualId: "ezer-alice", capabilities },
+          individual: {
+            callerId: "caller-a",
+            individualId: "ezer-alice",
+            capabilities,
+          },
         }),
       };
       const result = await createConnectMemory(
@@ -176,6 +182,7 @@ describe("Memory connection use case", () => {
       access.authorize = async () => ({
         ok: true,
         individual: {
+          callerId: "caller-a",
           individualId,
           capabilities: { readMemory: false, writeMemory: false },
         },

@@ -21,6 +21,7 @@ describe("Access-owned authorization semantics", () => {
     expect(await control.authorize("synthetic-ticket")).toEqual({
       ok: true,
       individual: {
+        callerId: "caller-a",
         individualId: "ezer-a",
         capabilities: { readMemory: false, writeMemory: false },
       },

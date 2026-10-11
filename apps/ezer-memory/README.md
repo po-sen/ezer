@@ -3,9 +3,10 @@
 This package implements Ezer's independent memory service in TypeScript on
 Cloudflare Workers. The MCP endpoint requires an authorized connection.
 An internal SQLite-backed Durable Object stores sourced text memories and their
-revision history. OAuth JWT access-token validation and Ezer identity binding are
-implemented, along with scoped MCP memory tools. Login-provider provisioning,
-model invocation, and cloud deployment are not implemented.
+revision history. Cloudflare Access browser login, library-managed OAuth grants,
+external JWT validation, Ezer identity binding and scoped MCP tools are implemented.
+Cloud resources, Access application provisioning, model invocation and deployment
+remain operator responsibilities. See the [Cloudflare login guide](AUTHORIZATION.md).
 
 ## Development
 
@@ -58,8 +59,9 @@ gateway, translating provider results into Memory-owned contracts. HTTP/MCP deli
 uses Memory's own inbound connection use case and never imports Access types.
 This is a one-way dependency from Memory to Access, with request/response mapping
 inside the ACL. Access owns neither memory SQL nor transactions.
-Its configuration and JWT adapters are independent and consume only outbound ports.
-No account database or custom login/token-issuing protocol is introduced.
+Its configuration, JWT, Cloudflare Access and Cloudflare OAuth adapters are independent.
+The official Cloudflare library owns OAuth protocol and KV storage; no custom token
+protocol or account database is introduced.
 
 Context contracts use their own language. Access accepts opaque credentials and
 works with verified callers, `connect`, `read-memory`, and `write-memory` permissions,
@@ -75,7 +77,9 @@ issuer/audience and scope checks in the JWT adapter.
 The operator supplies the non-secret JSON binding `EZER_AUTHORIZATION` through
 trusted deployment configuration. The committed default is `{}`: `/mcp` and
 resource metadata return `503` until the policy is valid; `/health` remains live.
-The following is a placeholder example, not a deployed service or a credential:
+Choose [Cloudflare Access with hosted OAuth](AUTHORIZATION.md) for the bundled login
+flow, or use the external JWT mode below. This is a placeholder, not a deployed
+service or a credential:
 
 ```json
 {
@@ -132,7 +136,7 @@ provider's revocation behavior before deployment. Public signing keys are cached
 for at most five minutes with a three-second fetch timeout and thirty-second
 unknown-key refresh cooldown.
 
-Signing keys and login credentials stay with the external authorization provider.
+In external JWT mode, signing keys and login credentials stay with the external authorization provider.
 The host's OAuth client manages access and refresh credentials outside skills,
 tool arguments, memory, and Git. This resource server needs no private signing
 key or client secret. Worker configuration is read from explicit `env` bindings;
@@ -498,7 +502,7 @@ All test data is disposable; the test container must be removed when finished.
 
 ## Next capabilities
 
-Add retrieval and startup recovery, then connect the plugin skill to the public
-memory operations. Native provider login, plugin installation, and cross-computer
-continuity still require separate acceptance tests. R2 remains a later attachment
+The packaged continuity skill uses the public memory operations. After an
+authorized deployment, verify native provider login and cross-computer continuity
+with each supported host. R2 remains a later attachment
 candidate and is not bound or provisioned here.
