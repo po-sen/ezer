@@ -8,7 +8,8 @@ one explicit memory endpoint, and native Codex and Claude Code manifests.
 ## Prerequisites
 
 An operator must provide a reachable HTTPS `ezer-memory` endpoint ending in
-`/mcp` and configure its external OAuth authority and caller-to-individual
+`/mcp` and configure [Cloudflare Access login](../../apps/ezer-memory/AUTHORIZATION.md)
+or an external OAuth authority, with caller-to-individual
 assignment. See the [service README](../../apps/ezer-memory/README.md).
 The plugin does not deploy a service, provision a login provider, or grant access.
 The default service configuration denies connections.

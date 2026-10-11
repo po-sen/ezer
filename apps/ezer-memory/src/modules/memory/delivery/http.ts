@@ -53,7 +53,7 @@ export function createMemoryHttpHandler(
         {
           resource: settings.resource,
           authorization_servers: [settings.authorizationServer],
-          scopes_supported: [
+          scopes_supported: settings.authorizationScopes ?? [
             settings.connectionScope,
             settings.readScope,
             settings.writeScope,
@@ -64,9 +64,12 @@ export function createMemoryHttpHandler(
       );
     }
     const header = request.headers.get("Authorization");
-    const token = header?.match(/^Bearer +([A-Za-z0-9._~-]+=*)$/i)?.[1] ?? null;
+    const token =
+      header?.match(/^Bearer +([A-Za-z0-9._~+/:=-]+)$/i)?.[1] ?? null;
     const result = await connection.execute(token);
-    const challenge = `Bearer resource_metadata="${resource.origin}${metadataPath}", scope="${settings.connectionScope}"`;
+    const requestedScopes =
+      settings.authorizationScopes?.join(" ") ?? settings.connectionScope;
+    const challenge = `Bearer resource_metadata="${resource.origin}${metadataPath}", scope="${requestedScopes}"`;
     if (!result.ok) {
       const status =
         result.code === "UNAVAILABLE"

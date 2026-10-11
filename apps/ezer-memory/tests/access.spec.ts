@@ -445,6 +445,7 @@ describe("authenticated Ezer identity", () => {
     expect(await access.authorize("synthetic")).toEqual({
       ok: true,
       individual: {
+        callerId: "bob",
         individualId: "ezer-bob",
         capabilities: { readMemory: false, writeMemory: false },
       },

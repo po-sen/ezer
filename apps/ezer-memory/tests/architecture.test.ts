@@ -60,10 +60,15 @@ function violation(
         target.startsWith(prefix),
       ) ||
         target === "../package.json" ||
+        target.startsWith("delivery/") ||
         target.startsWith("configuration/"))
       ? undefined
       : "unregistered bootstrap dependency";
   }
+  if (file.startsWith("delivery/"))
+    return target.startsWith("delivery/")
+      ? undefined
+      : "service routing must remain independent of context implementations";
   if (file.startsWith("configuration/"))
     return dependency === "zod" || target.startsWith("configuration/")
       ? undefined
@@ -79,6 +84,11 @@ function violation(
     const persistence = "modules/memory/infrastructure/persistence/";
     const externals: Record<string, readonly string[]> = {
       "modules/access/infrastructure/jwt/": ["jose"],
+      "modules/access/infrastructure/cloudflare-access/": ["jose"],
+      "modules/access/infrastructure/cloudflare-oauth/": [
+        "@cloudflare/workers-oauth-provider",
+      ],
+      "modules/access/delivery/": ["@cloudflare/workers-oauth-provider"],
       [`${persistence}durable-object/`]: ["durable-utils/sql-migrations"],
       [`${persistence}sqlite/cli/`]: [
         "node:crypto",
@@ -225,6 +235,23 @@ test("production imports respect context ownership and inward dependencies", () 
 test("the boundary guard rejects SDK leakage, reversed dependencies, and foreign domains", () => {
   for (const [file, dependency] of [
     ["modules/memory/domain/memory.ts", "@modelcontextprotocol/server"],
+    [
+      "delivery/router.ts",
+      "../modules/access/infrastructure/cloudflare-oauth/index.ts",
+    ],
+    [
+      "modules/access/application/login.ts",
+      "@cloudflare/workers-oauth-provider",
+    ],
+    [
+      "modules/access/ports/inbound/login.ts",
+      "@cloudflare/workers-oauth-provider",
+    ],
+    [
+      "modules/access/infrastructure/cloudflare-oauth/verify.ts",
+      "../cloudflare-access/index.ts",
+    ],
+    ["modules/memory/delivery/mcp.ts", "@cloudflare/workers-oauth-provider"],
     [
       "modules/memory/ports/inbound/commit-memory.ts",
       "../../domain/memory-revision",

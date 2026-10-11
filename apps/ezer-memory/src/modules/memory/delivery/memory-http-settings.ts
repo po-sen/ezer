@@ -4,4 +4,5 @@ export interface MemoryHttpSettings {
   readonly connectionScope: string;
   readonly readScope: string;
   readonly writeScope: string;
+  readonly authorizationScopes?: readonly string[];
 }

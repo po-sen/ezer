@@ -21,6 +21,7 @@
     "test:postgresql": "node scripts/test-postgresql.ts"
   },
   "dependencies": {
+    "@cloudflare/workers-oauth-provider": "1.2.3",
     "@modelcontextprotocol/server": "2.1.0",
     "durable-utils": "0.3.7",
     "jose": "6.2.12",

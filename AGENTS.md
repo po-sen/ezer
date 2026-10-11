@@ -6,7 +6,9 @@ Ezer is an early-stage plugin project using Agent Skills and MCP. The planned
 memory service uses TypeScript on Cloudflare Workers. Its authenticated MCP endpoint
 exposes service information, authorized Ezer identity metadata, and scoped memory
 creation, reading, correction, and listing. A SQLite-backed Durable Object implements
-memory persistence; authorization-provider provisioning is not implemented.
+memory persistence. Hosted OAuth uses the official Cloudflare library and a
+self-hosted Access application; cloud-resource and Access-policy provisioning
+remain operator responsibilities.
 Keep product behavior portable across compatible host agents.
 These instructions guide repository development, not Ezer's runtime personality.
 
@@ -34,6 +36,9 @@ These instructions guide repository development, not Ezer's runtime personality.
   directory into a release: local prototype files may coexist outside Git.
 - `pnpm run test:plugin`: deterministic instance packaging tests, included in
   the full check. Native installation and model behavior need separate checks.
+- `apps/ezer-memory/AUTHORIZATION.md`: Cloudflare login setup, consent, token
+  lifecycle, revocation limits, and live acceptance requirements.
+- `apps/ezer-memory/src/delivery/`: context-independent HTTP handler routing.
 - `apps/ezer-memory/src/configuration/`: deployment syntax validation and adapter
   settings; never a shared bounded-context model.
 - `pnpm-workspace.yaml`: workspace membership and dependency build permissions.
@@ -180,7 +185,13 @@ compose both contexts and the ACL; it must not perform contract translation.
 Access owns verified callers, connection/read/write permissions, and caller-to-individual
 assignments. Its `CredentialVerifier` port accepts opaque proof and returns
 Access-owned facts. JWT algorithms, issuer/audience checks, JWKS URLs, key caching,
-and scope-to-permission translation stay in the JWT adapter. The deployment
+and scope-to-permission translation stay in the JWT adapter. Hosted OAuth token validation and grant-to-individual restrictions belong to the
+Cloudflare OAuth adapter; Access browser assertion verification belongs to its
+independent Cloudflare Access adapter. Access delivery owns consent and calls
+Access inbound contracts; only the library handles OAuth codes, PKCE, tokens and
+KV records. Keep the OAuth KV namespace separate from Memory persistence. Never
+accept a browser Access assertion at the MCP endpoint. A consented grant must not
+follow a caller reassignment to a different individual. The deployment
 configuration module validates explicit Worker bindings and supplies settings to
 the selected adapters; it cannot import context implementations. OAuth discovery
 and protocol errors belong to HTTP delivery, not Access or Memory inner contracts.
