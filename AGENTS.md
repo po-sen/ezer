@@ -29,6 +29,11 @@ These instructions guide repository development, not Ezer's runtime personality.
 - `.husky/`: local pre-commit hook.
 - `.github/`: CI and pull request template.
 - `apps/ezer-memory/`: Worker entry point, memory context, and service tests.
+- `plugins/ezer/`: shared plugin manifest and continuity skill source; package
+  configured instances with `pnpm plugin:package`. Never recursively copy this
+  directory into a release: local prototype files may coexist outside Git.
+- `pnpm run test:plugin`: deterministic instance packaging tests, included in
+  the full check. Native installation and model behavior need separate checks.
 - `apps/ezer-memory/src/configuration/`: deployment syntax validation and adapter
   settings; never a shared bounded-context model.
 - `pnpm-workspace.yaml`: workspace membership and dependency build permissions.

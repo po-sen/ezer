@@ -1,0 +1,21 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "ezer",
+  "version": "0.1.0-alpha.1",
+  "description": "Continue an Ezer assistant through agent-managed, sourced memories.",
+  "author": { "name": "po-sen" },
+  "repository": "https://github.com/po-sen/ezer",
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Ezer",
+        "shortDescription": "Continue your Ezer",
+        "longDescription": "Recover an Ezer's identity and relevant memories, then choose what to learn through its connected memory service.",
+        "developerName": "po-sen",
+        "category": "Productivity",
+        "capabilities": ["Interactive", "Write"],
+        "defaultPrompt": "Continue this Ezer and recover the memories relevant to our conversation."
+      }
+    }
+  }
+}
