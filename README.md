@@ -21,7 +21,7 @@ pagination. The plugin includes startup recovery and agent-managed memory skills
 An end-user login deployment is not provided yet. Installing a generated plugin
 does not require these development dependencies.
 
-Use Node.js 24 or later and pnpm 12.6.0, pinned in the root `packageManager`
+Use Node.js 24.5 or later and pnpm 12.6.0, pinned in the root `packageManager`
 field. Install that pnpm version using the [official installation guide](https://pnpm.io/installation).
 From a Git checkout, install the locked development dependencies and activate the
 local Git hooks:
@@ -99,7 +99,10 @@ This checks all indexed paths before formatting supported tracked files, even
 when no changes are staged. It reads working-tree contents and excludes untracked
 drafts. Stage intended new files before running it; use `check:staged` to validate
 a partially staged commit. Neither command reformats files. The full check also
-runs plugin packaging tests, service type checks, tests, and a local Worker bundle build. It requires the
+runs plugin packaging tests, service type checks, tests, a local Worker bundle build,
+and an HTTPS acceptance check with synthetic identities. OpenSSL with `req -addext`
+support is required. Optional [native host acceptance](apps/ezer-memory/ACCEPTANCE.md)
+runs separately because it invokes real models and needs host login. The full check requires the
 dedicated PostgreSQL test service described in the service README.
 
 GitHub Actions runs `Repository checks` on Node.js 24 for every PR targeting
