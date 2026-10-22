@@ -155,6 +155,9 @@ After deploying and configuring real login, verify with synthetic information:
    or duplicate writes.
 
 These are host/model acceptance checks, not guarantees from static validation.
+The repository's [local acceptance runner](../../apps/ezer-memory/ACCEPTANCE.md)
+exercises generated packages with isolated synthetic services, and can run real
+Codex/Claude Code sessions separately from CI.
 Local package and backend tests do not establish remote login or cross-computer
 continuity. Physical deletion, backup/restore, semantic search, and attachments are not
 provided by this plugin.

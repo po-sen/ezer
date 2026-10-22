@@ -13,18 +13,22 @@ remain operator responsibilities. See the [Cloudflare login guide](AUTHORIZATION
 From the repository root, use the pinned pnpm version and run
 `pnpm install --frozen-lockfile`, then:
 
-| Command                                       | Purpose                                                     |
-| --------------------------------------------- | ----------------------------------------------------------- |
-| `pnpm --filter @ezer/memory dev`              | Start Wrangler locally on loopback.                         |
-| `pnpm --filter @ezer/memory types`            | Regenerate Worker bindings, entry-point, and runtime types. |
-| `pnpm --filter @ezer/memory types:check`      | Check that committed generated types are current.           |
-| `pnpm --filter @ezer/memory typecheck`        | Regenerate types, then check source and tests.              |
-| `pnpm --filter @ezer/memory test`             | Run architecture, Node SQLite CLI, and workerd tests.       |
-| `pnpm --filter @ezer/memory migrations:check` | Check SQL pairs, checksums, and generated bundle.           |
-| `pnpm --filter @ezer/memory build`            | Produce a local bundle using `wrangler deploy --dry-run`.   |
-| `pnpm run check`                              | Run the repository's full CI validation.                    |
+| Command                                       | Purpose                                                           |
+| --------------------------------------------- | ----------------------------------------------------------------- |
+| `pnpm --filter @ezer/memory dev`              | Start Wrangler locally on loopback.                               |
+| `pnpm --filter @ezer/memory types`            | Regenerate Worker bindings, entry-point, and runtime types.       |
+| `pnpm --filter @ezer/memory types:check`      | Check that committed generated types are current.                 |
+| `pnpm --filter @ezer/memory typecheck`        | Regenerate types, then check source and tests.                    |
+| `pnpm --filter @ezer/memory test`             | Run architecture, Node SQLite CLI, and workerd tests.             |
+| `pnpm --filter @ezer/memory test:e2e`         | Build and test packaged HTTPS connections and durable recovery.   |
+| `pnpm --filter @ezer/memory test:hosts`       | Opt-in native Codex/Claude model acceptance; requires host login. |
+| `pnpm --filter @ezer/memory migrations:check` | Check SQL pairs, checksums, and generated bundle.                 |
+| `pnpm --filter @ezer/memory build`            | Produce a local bundle using `wrangler deploy --dry-run`.         |
+| `pnpm run check`                              | Run the repository's full CI validation.                          |
 
-No Cloudflare login or project secrets are needed for these checks. The local URL
+No Cloudflare login or project secrets are needed for the deterministic checks.
+Native host checks require the host's existing login and consume model usage;
+see [local acceptance](ACCEPTANCE.md) for isolation, evidence, and limits. The local URL
 belongs to the machine running Wrangler. It does not prove connectivity from a
 different computer. Public workers.dev and preview URLs are disabled in the
 configuration; a real deployment requires a separate, authorized setup.
@@ -47,8 +51,8 @@ configuration; a real deployment requires a separate, authorized setup.
 Every MCP request is authenticated before protocol/body parsing. Protocol sessions
 never determine durable identity. Identity lookup reads only the authorized object's
 sequence. Content tools enforce read/write grants before invoking persistence.
-The current tests use synthetic MCP clients; native plugin installation and real
-Codex/Claude Code compatibility still require separate acceptance tests.
+CI uses synthetic MCP clients. Native plugin behavior is checked separately through
+the opt-in acceptance runner; neither establishes real deployment login.
 
 ## Authorization and stable identity
 

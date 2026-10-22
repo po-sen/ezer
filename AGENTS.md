@@ -44,7 +44,7 @@ These instructions guide repository development, not Ezer's runtime personality.
 - `pnpm-workspace.yaml`: workspace membership and dependency build permissions.
 - `AGENTS.md`: canonical instructions; `CLAUDE.md` imports this file.
 
-Use Node.js 24 (the CI version in `.node-version`) or later, and the exact pnpm
+Use Node.js 24.5 or later (CI uses the latest 24.x from `.node-version`), and the exact pnpm
 version pinned by `packageManager` in the root `package.json`:
 
 | Command                          | Purpose                                                                                            |
@@ -60,7 +60,10 @@ local bundle build. Use the staged check to validate partially staged formatting
 Service commands are available with `pnpm --filter @ezer/memory run <command>`:
 `types`, `types:check`, `typecheck`, `test`, `build`, `dev`,
 `migrations:generate`, `migrations:check`, `migrate:sqlite`,
-`migrate:postgresql`, and `test:postgresql`. The full check requires the dedicated
+`migrate:postgresql`, `test:postgresql`, `test:e2e`, and `test:hosts`. The deterministic
+HTTPS acceptance check requires OpenSSL and runs in CI; native host acceptance is
+opt-in, uses existing host login, and reports model results separately. See
+`apps/ezer-memory/ACCEPTANCE.md`. The full check requires the dedicated
 PostgreSQL test service described in the service README. Persistence tests
 use synthetic data through the internal `EZER_MEMORY` binding. Public identity
 lookup may read only the server-authorized object's change sequence. Memory tools
