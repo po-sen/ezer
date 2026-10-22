@@ -131,5 +131,42 @@ export function createMemoryOperations(
         };
       });
     },
+    search(query) {
+      return perform(read, "READ_NOT_GRANTED", async () => {
+        const result = await persistence.search(individualId, {
+          query: query.query,
+          ...(query.limit === undefined ? {} : { limit: query.limit }),
+          ...(query.cursor === undefined
+            ? {}
+            : {
+                cursor: {
+                  query: query.cursor.query,
+                  snapshotSequence: query.cursor.snapshotSequence,
+                  afterSequence: query.cursor.afterSequence,
+                },
+              }),
+        });
+        if (!result.ok) return result;
+        return {
+          ok: true,
+          value: {
+            individualId,
+            changeSequence: result.value.changeSequence,
+            memories: result.value.memories.map((memory) => ({
+              memoryId: memory.memoryId,
+              revision: memory.revision,
+              recordedAt: memory.recordedAt,
+              changeSequence: memory.changeSequence,
+              preview: memory.preview,
+            })),
+            nextCursor: result.value.nextCursor && {
+              query: result.value.nextCursor.query,
+              snapshotSequence: result.value.nextCursor.snapshotSequence,
+              afterSequence: result.value.nextCursor.afterSequence,
+            },
+          },
+        };
+      });
+    },
   };
 }

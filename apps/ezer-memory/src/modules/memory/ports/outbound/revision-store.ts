@@ -7,5 +7,12 @@ export interface RevisionStore {
     afterSequence: number,
     limit: number,
   ): readonly MemoryRevision[];
+  // Literal body substring; only ASCII letters are case-insensitive.
+  search(
+    query: string,
+    snapshotSequence: number,
+    afterSequence: number,
+    limit: number,
+  ): readonly MemoryRevision[];
   append(revision: MemoryRevision): void;
 }

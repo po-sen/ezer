@@ -5,6 +5,7 @@ interface MemoryServiceDescription {
   readonly capabilities: {
     readonly memoryRead: true;
     readonly memoryWrite: true;
+    readonly memorySearch: true;
   };
 }
 

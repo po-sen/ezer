@@ -5,7 +5,7 @@
 Ezer is an early-stage plugin project using Agent Skills and MCP. The planned
 memory service uses TypeScript on Cloudflare Workers. Its authenticated MCP endpoint
 exposes service information, authorized Ezer identity metadata, and scoped memory
-creation, reading, correction, and listing. A SQLite-backed Durable Object implements
+creation, reading, correction, listing, and literal body search. A SQLite-backed Durable Object implements
 memory persistence. Hosted OAuth uses the official Cloudflare library and a
 self-hosted Access application; cloud-resource and Access-policy provisioning
 remain operator responsibilities.

@@ -83,5 +83,33 @@ export function createMemoryPersistence(
         throw new PersistenceFault();
       }
     },
+    async search(individualId, query) {
+      try {
+        const result = await namespace
+          .getByName(`ezer:v1:${individualId}`)
+          .search(query);
+        if (!result.ok) return result;
+        return {
+          ok: true,
+          value: {
+            changeSequence: result.value.changeSequence,
+            memories: result.value.memories.map((memory) => ({
+              memoryId: memory.memoryId,
+              revision: memory.revision,
+              recordedAt: memory.recordedAt,
+              changeSequence: memory.changeSequence,
+              preview: memory.preview,
+            })),
+            nextCursor: result.value.nextCursor && {
+              query: result.value.nextCursor.query,
+              snapshotSequence: result.value.nextCursor.snapshotSequence,
+              afterSequence: result.value.nextCursor.afterSequence,
+            },
+          },
+        };
+      } catch {
+        throw new PersistenceFault();
+      }
+    },
   };
 }

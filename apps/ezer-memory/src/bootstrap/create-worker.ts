@@ -6,6 +6,7 @@ import {
   createInspectMemoryState,
   createDescribeMemoryBinding,
   createListMemories,
+  createSearchMemories,
   createMemoryOperations,
 } from "../modules/memory/application/index.ts";
 
@@ -104,6 +105,7 @@ export function createMemory(
       createInspectMemory(unitOfWork),
       createInspectMemoryState(unitOfWork),
       createListMemories(unitOfWork),
+      createSearchMemories(unitOfWork),
     ),
   };
 }

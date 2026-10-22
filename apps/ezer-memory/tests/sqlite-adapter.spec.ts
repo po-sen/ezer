@@ -91,6 +91,30 @@ it("exercises SQLite-owned migrations and Stores without the Durable Object adap
       expect(revisions.list(3, 0, 1)).toEqual([correction]);
       expect(revisions.list(3, 2, 10)).toEqual([other]);
       expect(revisions.list(3, 0, 10)).toEqual([correction, other]);
+      expect(revisions.search("SYNTHETIC", 1, 0, 10)).toEqual([revision]);
+      expect(revisions.search("synthetic", 3, 0, 10)).toEqual([other]);
+      expect(revisions.search("synthetic", 3, 3, 10)).toEqual([]);
+      expect(revisions.search("source", 3, 0, 10)).toEqual([]);
+      const multilingual = {
+        ...revision,
+        memoryId: "multilingual",
+        changeSequence: 4,
+        body: "Coffee \u7e41\u9ad4\u4e2d\u6587 100%_ ' OR 1=1 -- CAFÉ",
+      };
+      storage.transactionSync(() => {
+        revisions.append(multilingual);
+        state.advance(3, 4);
+      });
+      for (const query of [
+        "coffee",
+        "\u7e41",
+        "\u7e41\u9ad4\u4e2d\u6587",
+        "%_",
+        "' OR 1=1 --",
+        "CAFÉ",
+      ])
+        expect(revisions.search(query, 4, 0, 1)).toEqual([multilingual]);
+      expect(revisions.search("café", 4, 0, 10)).toEqual([]);
       expect(storage.kv.get("memory:schema-version")).toBeUndefined();
 
       for (const reversal of [...reversals].reverse())

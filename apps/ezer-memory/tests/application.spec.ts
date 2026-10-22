@@ -5,6 +5,7 @@ import {
   createInspectMemoryState,
   createDescribeMemoryBinding,
   createListMemories,
+  createSearchMemories,
 } from "../src/modules/memory/application/index.ts";
 
 import { createMemoryRpcHandler } from "../src/modules/memory/delivery/index.ts";
@@ -39,6 +40,7 @@ function harness() {
     },
     revisions: {
       list: () => [],
+      search: () => [],
       find: () => {
         calls.push("find");
         return null;
@@ -182,6 +184,7 @@ describe("memory application orchestration", () => {
         },
       },
       createListMemories(broken),
+      createSearchMemories(broken),
     );
     expect(await rpc.commit(command())).toEqual({
       ok: false,
@@ -192,6 +195,10 @@ describe("memory application orchestration", () => {
       code: "INTERNAL_ERROR",
     });
     expect(rpc.inspectState()).toEqual({ ok: false, code: "INTERNAL_ERROR" });
+    expect(rpc.search({ query: "example" })).toEqual({
+      ok: false,
+      code: "INTERNAL_ERROR",
+    });
   });
 
   it("validates logical identity before resolving storage and masks binding failures", async () => {

@@ -21,16 +21,33 @@ or consciousness to fill a gap in memory.
    its server association and returned `individualId` for this interaction.
    An installation name is a label, not the individual ID. Service capabilities
    describe implemented operations, not permission to read or write.
-3. Start `ezer_list({"limit": 20})` without a cursor. Read relevant records with
-   `ezer_read`, passing both the listed `memoryId` and `revision`. A preview is
-   truncated evidence, not a complete memory. Pages are ordered by change sequence
-   ascending, not relevance or newest first. Follow `nextCursor` unchanged when
-   more context is useful; normally inspect up to three pages before responding.
-   If more remain, disclose partial recovery when it matters and continue when
-   the task needs it. No search tool is available in this version.
-4. Answer the user's request using the retrieved evidence and its original scope.
+3. Start `ezer_list({"limit": 20})` without a cursor for general orientation.
+   When the request gives useful clues and `capabilities.memorySearch` is true,
+   use `ezer_search({"query": "a relevant phrase", "limit": 20})` on this server
+   to find memories beyond those first pages. Choose concrete words or short
+   phrases from the request or recovered evidence. Search matches a literal
+   substring of memory bodies; ASCII letter case is ignored, other characters
+   match exactly. It does not infer synonyms, translate, search source fields,
+   or interpret wildcards or Boolean expressions. Try a few relevant variants
+   when useful; do not send sensitive data merely to test a search.
+4. Read relevant listed or searched records with `ezer_read`, passing both
+   `memoryId` and `revision`. Previews contain only the first 160 characters
+   and may omit the search match; they are not complete evidence. Both tools
+   order results by change sequence ascending, not relevance or newest first.
+   Follow `nextCursor` unchanged with the same search query when more context
+   is useful. Normally inspect up to three pages total before responding;
+   disclose partial recovery when it matters and continue when the task needs it.
+   A cursor preserves its first page's snapshot; start without one for current
+   memories. New search phrases always start without a cursor. Search queries
+   must be nonblank, at most 200 UTF-16 code units, and contain no NUL character.
+5. Answer the user's request using the retrieved evidence and its original scope.
    Only an empty completed listing establishes that no records exist at that
-   snapshot. Read denial, a failed request, or an unfinished listing does not.
+   snapshot. An empty search means only that this phrase did not match, not that
+   the Ezer has no memories. Read denial, a failed request, or an unfinished
+   listing does not establish absence either. If search is not advertised by an
+   older server, use bounded listing and explain the retrieval limit. If search
+   is advertised but fails, report that failure; do not invent recall or substitute
+   another server.
 
 Repeat recovery in a new conversation, after lost context, or after reconnection.
 If any result identifies a different individual, stop using the old memories,

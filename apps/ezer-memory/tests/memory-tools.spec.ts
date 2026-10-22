@@ -78,6 +78,247 @@ async function harness() {
 }
 
 describe("scoped memory MCP operations", () => {
+  it("searches complete bodies with literal multilingual text beyond the first listing page", async () => {
+    const h = await harness();
+    const client = await h.client();
+    for (let i = 0; i < 12; i++)
+      value(
+        await client.callTool({
+          name: "ezer_remember",
+          arguments: memory(`earlier-${i}`),
+        }),
+      );
+    const body = `${"Prefix ".repeat(30)}Coffee \u7e41\u9ad4\u4e2d\u6587 100%_ ' OR 1=1 -- CAFÉ`;
+    value(
+      await client.callTool({
+        name: "ezer_remember",
+        arguments: { ...memory("match"), body },
+      }),
+    );
+    await evictDurableObject(env.EZER_MEMORY.getByName(`ezer:v1:${h.alice}`));
+    const reader = await h.client("ezer:connect ezer:memory:read", "alias");
+    for (const query of [
+      "coffee",
+      "COFFEE",
+      "\u7e41",
+      "\u7e41\u9ad4\u4e2d\u6587",
+      "%_",
+      "' OR 1=1 --",
+      "CAFÉ",
+      "coff",
+    ])
+      expect(
+        value(
+          await reader.callTool({ name: "ezer_search", arguments: { query } }),
+        ),
+      ).toMatchObject({
+        individualId: h.alice,
+        memories: [
+          { memoryId: "match", revision: 1, preview: body.slice(0, 160) },
+        ],
+        nextCursor: null,
+      });
+    for (const query of [
+      "café",
+      "source evidence",
+      "test:conversation",
+      "coffee OR tea",
+      "Coffee  ",
+    ])
+      expect(
+        value(
+          await reader.callTool({ name: "ezer_search", arguments: { query } }),
+        ).memories,
+      ).toEqual([]);
+    const other = await h.client(all, "bob");
+    expect(
+      value(
+        await other.callTool({
+          name: "ezer_search",
+          arguments: { query: "coffee" },
+        }),
+      ).memories,
+    ).toEqual([]);
+    const searchResult = value(
+      await reader.callTool({
+        name: "ezer_search",
+        arguments: { query: "coffee" },
+      }),
+    );
+    expect(JSON.stringify(searchResult)).not.toContain(
+      env.EZER_MEMORY.idFromName(`ezer:v1:${h.alice}`).toString(),
+    );
+    expect(
+      value(
+        await reader.callTool({
+          name: "ezer_read",
+          arguments: { memoryId: "match", revision: 1 },
+        }),
+      ),
+    ).toMatchObject({ memory: { body } });
+  });
+
+  it("pages only latest-at-snapshot matches and starts a fresh search after corrections", async () => {
+    const h = await harness();
+    const client = await h.client();
+    for (const id of ["first", "second", "third"])
+      value(
+        await client.callTool({
+          name: "ezer_remember",
+          arguments: { ...memory(id), body: `tea ${id}` },
+        }),
+      );
+    const first = value(
+      await client.callTool({
+        name: "ezer_search",
+        arguments: { query: "tea", limit: 1 },
+      }),
+    );
+    expect(first).toMatchObject({
+      changeSequence: 3,
+      memories: [{ memoryId: "first" }],
+      nextCursor: { query: "tea", snapshotSequence: 3, afterSequence: 1 },
+    });
+    for (const id of ["second", "third"])
+      value(
+        await client.callTool({
+          name: "ezer_revise",
+          arguments: {
+            ...memory(id, `correct-${id}`),
+            body: id === "second" ? "coffee" : "tea revised",
+            expectedRevision: 1,
+            reason: "Synthetic correction",
+          },
+        }),
+      );
+    value(
+      await client.callTool({
+        name: "ezer_remember",
+        arguments: { ...memory("fourth"), body: "tea new" },
+      }),
+    );
+    const second = value(
+      await client.callTool({
+        name: "ezer_search",
+        arguments: { query: "tea", limit: 1, cursor: first.nextCursor },
+      }),
+    );
+    expect(second).toMatchObject({
+      changeSequence: 3,
+      memories: [{ memoryId: "second", revision: 1 }],
+      nextCursor: { query: "tea", snapshotSequence: 3, afterSequence: 2 },
+    });
+    const third = value(
+      await client.callTool({
+        name: "ezer_search",
+        arguments: { query: "tea", limit: 1, cursor: second.nextCursor },
+      }),
+    );
+    expect(third).toMatchObject({
+      changeSequence: 3,
+      memories: [{ memoryId: "third", revision: 1 }],
+      nextCursor: null,
+    });
+    expect(
+      value(
+        await client.callTool({
+          name: "ezer_read",
+          arguments: { memoryId: "second", revision: 1 },
+        }),
+      ),
+    ).toMatchObject({ memory: { body: "tea second" } });
+    const current = value(
+      await client.callTool({
+        name: "ezer_search",
+        arguments: { query: "tea" },
+      }),
+    );
+    expect(current).toMatchObject({
+      changeSequence: 6,
+      memories: [
+        { memoryId: "first", revision: 1 },
+        { memoryId: "third", revision: 2 },
+        { memoryId: "fourth", revision: 1 },
+      ],
+      nextCursor: null,
+    });
+    failure(
+      await client.callTool({
+        name: "ezer_search",
+        arguments: { query: "coffee", cursor: first.nextCursor },
+      }),
+      "INVALID_INPUT",
+    );
+    const other = await h.client(all, "bob");
+    for (const id of ["a", "b", "c"])
+      value(
+        await other.callTool({
+          name: "ezer_remember",
+          arguments: { ...memory(id), body: "tea other individual" },
+        }),
+      );
+    const isolated = value(
+      await other.callTool({
+        name: "ezer_search",
+        arguments: { query: "tea", cursor: first.nextCursor },
+      }),
+    );
+    expect(isolated).toMatchObject({
+      individualId: h.bob,
+      memories: [{ memoryId: "b" }, { memoryId: "c" }],
+    });
+    expect(JSON.stringify(isolated)).not.toContain(h.alice);
+  });
+
+  it("bounds search input at MCP and RPC and reports an empty search honestly", async () => {
+    const h = await harness();
+    const client = await h.client();
+    expect(
+      value(
+        await client.callTool({
+          name: "ezer_search",
+          arguments: { query: "absent" },
+        }),
+      ),
+    ).toMatchObject({ changeSequence: 0, memories: [], nextCursor: null });
+    for (const input of [
+      {},
+      { query: "" },
+      { query: " \t" },
+      { query: "x".repeat(201) },
+      { query: "a\u0000b" },
+      { query: "x", limit: 0 },
+      { query: "x", limit: 51 },
+      { query: "x", limit: 1.5 },
+      { query: "x", individualId: h.bob },
+      {
+        query: "x",
+        cursor: { query: "x", snapshotSequence: 1, afterSequence: 0 },
+      },
+      {
+        query: "x",
+        cursor: { query: "x", snapshotSequence: 0, afterSequence: 1 },
+      },
+      { query: "x", cursor: { snapshotSequence: 0, afterSequence: 0 } },
+    ]) {
+      expect(
+        (await client.callTool({ name: "ezer_search", arguments: input }))
+          .isError,
+      ).toBe(true);
+      expect(
+        await env.EZER_MEMORY.getByName(`ezer:v1:${h.alice}`).search(input),
+      ).toEqual({ ok: false, code: "INVALID_INPUT" });
+    }
+    expect(
+      value(
+        await client.callTool({
+          name: "ezer_search",
+          arguments: { query: "x".repeat(200), limit: 50 },
+        }),
+      ).memories,
+    ).toEqual([]);
+  });
+
   it("persists sourced memories across independent clients and eviction without leaking native IDs", async () => {
     const h = await harness();
     const writer = await h.client();
@@ -179,6 +420,13 @@ describe("scoped memory MCP operations", () => {
       );
       failure(
         await client.callTool({
+          name: "ezer_search",
+          arguments: { query: "private" },
+        }),
+        "READ_NOT_GRANTED",
+      );
+      failure(
+        await client.callTool({
           name: "ezer_remember",
           arguments: memory("denied"),
         }),
@@ -205,6 +453,13 @@ describe("scoped memory MCP operations", () => {
     );
     failure(
       await writer.callTool({ name: "ezer_list", arguments: {} }),
+      "READ_NOT_GRANTED",
+    );
+    failure(
+      await writer.callTool({
+        name: "ezer_search",
+        arguments: { query: "private" },
+      }),
       "READ_NOT_GRANTED",
     );
     const reader = await h.client("ezer:connect ezer:memory:read");

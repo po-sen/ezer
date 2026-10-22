@@ -12,7 +12,7 @@ including traceable corrections and ordered changes within that individual.
 - Require a correction reason and matching expected revision when revising a record.
 - Maintain the individual's change sequence and operation receipts so writes are
   ordered and completed retries return the original result.
-- List bounded previews at a stable revision snapshot and enforce content grants.
+- List and search bounded previews at a stable revision snapshot and enforce content grants.
 - Read a record's latest or requested revision and expose detached views through
   inbound contracts.
 - Own memory storage isolation, transaction boundaries, and adapter-specific
@@ -39,7 +39,8 @@ detached views. The context's [public index](index.ts) exposes selected inbound
 contracts. `ConnectMemory` resolves an authorized logical ID and content capabilities
 through Memory's own access gateway. It has no authorization-server metadata or protocol settings. `CommitMemory` and
 `InspectMemory` serve internal persistence operations; `ListMemories` selects bounded
-previews at a fixed sequence in one Unit of Work; `InspectMemoryState` reads
+previews at a fixed sequence in one Unit of Work; `SearchMemories` searches
+latest-at-snapshot bodies using literal text with ASCII case-insensitive matching; `InspectMemoryState` reads
 the current sequence. `DescribeMemoryBinding`
 resolves metadata for an already-authorized logical ID, and `DescribeMemoryService`
 reports service capabilities. Exporting a contract does not expose it over MCP.
@@ -93,13 +94,33 @@ do not shift subsequent pages. Cursors hold sequence positions only; they neithe
 authorize access nor select an individual. SQL selection belongs independently to
 each persistence adapter, using existing immutable history without a migration.
 
+`SearchMemories` has the same page bounds, preview length, ordering, and snapshot
+semantics. It accepts one nonblank literal query of at most 200 UTF-16 code units,
+without NUL characters. Spaces and punctuation are literal; only ASCII letter
+case is ignored. Chinese text can match substrings without a tokenizer. The query
+must match the cursor's query exactly. A cursor is a continuation position, not a
+credential: it cannot select another individual. Search checks each memory's
+latest revision at the snapshot before matching its body, so superseded text does
+not reappear in a fresh search. Sources, reasons, and older revisions are not
+searched. Previews are the first 160 characters and may omit the match; use the
+returned revision to read full evidence. Empty results establish only no match for
+that query. `MemoryOperations.search` enforces the same read grant as other content
+queries, before persistence.
+
+Both SQLite adapters independently implement this contract with bound SQL
+parameters and built-in substring matching. There is no new schema, search index,
+external model, or dependency. This initial implementation scans bodies; page
+limits bound returned data, not total scan cost. Measure large-history latency and
+storage reads before adding a context-owned index. It does not provide relevance
+ranking, tokenization, Unicode case folding, normalization, or semantic retrieval.
+
 ## Outside this context
 
 Memory does not choose what the agent remembers, define personality, infer
 emotions, or provide semantic search. Caller authentication and subject bindings
 belong to Access. Memory does not issue credentials, own another context's data,
-or coordinate cross-context transactions. Keyword/semantic retrieval, startup
-recovery, and standalone SQLite/PostgreSQL serving deployments remain future work.
+or coordinate cross-context transactions. Semantic retrieval and standalone SQLite/PostgreSQL serving deployments remain
+future work. Startup recovery is orchestrated by the plugin, not this context.
 
 ## Architecture correspondence
 
