@@ -91,6 +91,12 @@ it("exercises SQLite-owned migrations and Stores without the Durable Object adap
       expect(revisions.list(3, 0, 1)).toEqual([correction]);
       expect(revisions.list(3, 2, 10)).toEqual([other]);
       expect(revisions.list(3, 0, 10)).toEqual([correction, other]);
+      expect(revisions.list(0, 0, 10, "newest")).toEqual([]);
+      expect(revisions.list(1, 0, 10, "newest")).toEqual([revision]);
+      expect(revisions.list(3, 0, 1, "newest")).toEqual([other]);
+      expect(revisions.list(3, 3, 10, "newest")).toEqual([correction]);
+      expect(revisions.list(3, 2, 10, "newest")).toEqual([]);
+      expect(revisions.list(3, 0, 10, "newest")).toEqual([other, correction]);
       expect(revisions.search("SYNTHETIC", 1, 0, 10)).toEqual([revision]);
       expect(revisions.search("synthetic", 3, 0, 10)).toEqual([other]);
       expect(revisions.search("synthetic", 3, 3, 10)).toEqual([]);
@@ -115,6 +121,23 @@ it("exercises SQLite-owned migrations and Stores without the Durable Object adap
       ])
         expect(revisions.search(query, 4, 0, 1)).toEqual([multilingual]);
       expect(revisions.search("café", 4, 0, 10)).toEqual([]);
+      const boundary = {
+        ...revision,
+        memoryId: "boundary",
+        changeSequence: Number.MAX_SAFE_INTEGER,
+      };
+      revisions.append(boundary);
+      expect(revisions.list(Number.MAX_SAFE_INTEGER, 0, 1, "newest")).toEqual([
+        boundary,
+      ]);
+      expect(
+        revisions.list(
+          Number.MAX_SAFE_INTEGER,
+          boundary.changeSequence,
+          1,
+          "newest",
+        ),
+      ).toEqual([multilingual]);
       expect(storage.kv.get("memory:schema-version")).toBeUndefined();
 
       for (const reversal of [...reversals].reverse())

@@ -8,7 +8,12 @@ export function createDescribeMemoryService(
       name: "ezer-memory",
       version,
       stage: "foundation",
-      capabilities: { memoryRead: true, memoryWrite: true, memorySearch: true },
+      capabilities: {
+        memoryRead: true,
+        memoryWrite: true,
+        memorySearch: true,
+        memoryRecent: true,
+      },
     }),
   };
 }

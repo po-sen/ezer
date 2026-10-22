@@ -269,7 +269,7 @@ agent cannot request a grant by putting it in tool arguments.
 | `ezer_remember` | `operationId`, `memoryId`, `body`, `source`       | `ezer:memory:write` | Immutable revision 1 and a write receipt.                           |
 | `ezer_read`     | `memoryId`, optional `revision`                   | `ezer:memory:read`  | Full content, source, correction reason, and revision metadata.     |
 | `ezer_revise`   | Write fields plus `expectedRevision` and `reason` | `ezer:memory:write` | A new revision if the expected version is current.                  |
-| `ezer_list`     | Optional `limit` and `cursor`                     | `ezer:memory:read`  | Bounded previews with IDs, revisions, timestamps, and `nextCursor`. |
+| `ezer_list`     | Optional `order`, `limit`, and `cursor`           | `ezer:memory:read`  | Bounded previews with IDs, revisions, timestamps, and `nextCursor`. |
 | `ezer_search`   | Literal `query`, optional `limit` and `cursor`    | `ezer:memory:read`  | Matching body previews at a fixed revision snapshot.                |
 
 Every request also requires `ezer:connect`. Read and write are independent: write
@@ -290,10 +290,20 @@ receipt, even after subsequent corrections.
 
 Listing defaults to 10 records, permits 1-50, and includes at most 160 UTF-16 code
 units of each body's preview. The first page captures the individual's change
-sequence. Pages select the latest revision of each memory at that sequence,
-ordered by that revision's increasing change sequence. `nextCursor` contains
-`snapshotSequence` and `afterSequence`; supply it unchanged for the next page.
-A null cursor ends the listing. Start again without a cursor to see newer writes.
+sequence. Pages select the latest revision of each memory at that sequence.
+The default `order: "oldest"` sorts by increasing revision change sequence;
+`order: "newest"` reverses it so recently created or corrected memories come first.
+This is revision recency, not creation time or relevance. The service advertises
+newest-first listing as `capabilities.memoryRecent`.
+
+`nextCursor` contains `snapshotSequence` and `afterSequence`; newest-first cursors
+also contain `order: "newest"`. Supply the cursor unchanged for the next page;
+it retains the order even when the request omits `order`. An explicit request
+order must match its cursor, otherwise the request returns `INVALID_INPUT`.
+Legacy cursors without an order continue oldest first and retain their original
+format. A null cursor ends the listing. Start again without a cursor to change
+order or see newer writes. Corrections made after the snapshot do not move records
+between its pages.
 To read the content shown in a preview, request its explicit revision; an unversioned
 read returns the current revision, which may have changed since the listing.
 
@@ -311,8 +321,8 @@ Chinese substrings. Whitespace and punctuation remain literal. There are no
 wildcards, Boolean operators, synonyms, stemming, Unicode normalization, or source
 field matching. The service advertises this operation as `capabilities.memorySearch`.
 
-Search uses the same default/maximum page sizes, preview length, and ascending
-sequence order as listing. The first 160 characters may not include the match;
+Search uses the same default/maximum page sizes and preview length as listing,
+but always sorts by ascending change sequence. The first 160 characters may not include the match;
 read the returned `memoryId` and `revision` for full evidence. Search cursors also
 carry `query`; keep it and the request query unchanged when paging. Changing the
 phrase requires starting without a cursor. Corrections and new writes do not alter
@@ -344,7 +354,7 @@ contract. Its methods return `{ ok: true, value }` or `{ ok: false, code }`:
 
 | Method                                                                                      | Behavior                                                                                                                                                             |
 | ------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `list({ limit?, cursor? })`                                                                 | List latest-at-snapshot previews in one Unit of Work.                                                                                                                |
+| `list({ order?, limit?, cursor? })`                                                         | List latest-at-snapshot previews in the selected change-sequence order in one Unit of Work.                                                                          |
 | `search({ query, limit?, cursor? })`                                                        | Search latest-at-snapshot body previews in one Unit of Work.                                                                                                         |
 | `inspectState()`                                                                            | Read only the current change sequence for the bound object's identity metadata.                                                                                      |
 | `commit({ kind: "remember", operationId, memoryId, body, source })`                         | Create revision 1 of a new memory. Reusing a memory ID with a new operation returns `ALREADY_EXISTS`.                                                                |

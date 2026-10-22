@@ -89,13 +89,17 @@ through `ConnectMemory` on every request; no grant is cached across requests.
 
 `ListMemories` owns page bounds (default 10, maximum 50) and 160-character previews.
 The first page fixes a sequence, later pages return each memory's latest revision
-at that sequence ordered by revision change sequence. New writes and corrections
-do not shift subsequent pages. Cursors hold sequence positions only; they neither
-authorize access nor select an individual. SQL selection belongs independently to
+at that sequence ordered by revision change sequence. The default `oldest` order
+preserves existing clients; `newest` puts recent creations and corrections first,
+advertised as `memoryRecent`. New writes and corrections do not shift subsequent
+pages. Newest-first cursors carry their order; legacy cursors without an order
+remain oldest first. An explicit request order must match the cursor's order.
+Cursors contain only query positions and order; they neither authorize access nor
+select an individual. SQL selection belongs independently to
 each persistence adapter, using existing immutable history without a migration.
 
-`SearchMemories` has the same page bounds, preview length, ordering, and snapshot
-semantics. It accepts one nonblank literal query of at most 200 UTF-16 code units,
+`SearchMemories` has the same page bounds, preview length, and snapshot semantics,
+and always sorts oldest first. It accepts one nonblank literal query of at most 200 UTF-16 code units,
 without NUL characters. Spaces and punctuation are literal; only ASCII letter
 case is ignored. Chinese text can match substrings without a tokenizer. The query
 must match the cursor's query exactly. A cursor is a continuation position, not a

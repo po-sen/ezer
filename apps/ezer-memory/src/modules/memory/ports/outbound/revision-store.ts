@@ -6,6 +6,7 @@ export interface RevisionStore {
     snapshotSequence: number,
     afterSequence: number,
     limit: number,
+    order?: "oldest" | "newest",
   ): readonly MemoryRevision[];
   // Literal body substring; only ASCII letters are case-insensitive.
   search(

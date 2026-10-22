@@ -117,11 +117,15 @@ skills cannot enforce isolation inside a model's shared context.
 
 ## Behavior and acceptance
 
-On activation, the skill confirms identity, lists bounded memory previews, and
-reads relevant complete revisions. During interaction the agent chooses what
+On activation, the skill confirms identity, lists bounded memory previews with
+the most recent changes first when `memoryRecent` is advertised, and reads relevant
+complete revisions. Recent means created or corrected by change sequence, not
+importance or trustworthiness. Older servers retain default listing with an
+explicit recovery limit. During interaction the agent chooses what
 to preserve, links evidence, and reconciles corrections. It has no fixed
-personality schema or reserved memory IDs. Listing and literal body search are paginated and ordered by
-change sequence ascending. The agent chooses search phrases and reads complete
+personality schema or reserved memory IDs. Listing preserves the selected order
+in its cursor; literal body search remains oldest first. Both preserve the first
+page's snapshot. The agent chooses search phrases and reads complete
 matching revisions; search is not semantic, and an empty result does not establish
 that the Ezer has no memories. The skill falls back to bounded listing when an
 older server does not advertise `memorySearch`.
@@ -137,8 +141,10 @@ After deploying and configuring real login, verify with synthetic information:
    preference and verify a sourced write receipt.
 2. In a fresh conversation in host B, activate the same instance. Verify that it
    lists and reads that memory before referring to the preference.
-3. Correct it in B. Verify a new revision and that A can read it in a fresh
-   recovery; a prior receipt or cursor is not proof of current contents.
+3. Correct an older memory in B. Verify a new revision and that it appears first
+   in A's fresh recovery when `memoryRecent` is available. Continue an earlier
+   cursor and verify that it still returns its original snapshot and order;
+   a prior receipt or cursor is not proof of current contents.
 4. Activate a different instance. Verify that it cannot retrieve A's record and
    does not substitute A's tools when its own connection is unavailable.
 5. Search for a concrete phrase after the relevant memory is beyond the first

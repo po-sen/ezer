@@ -6,6 +6,7 @@ interface MemoryServiceDescription {
     readonly memoryRead: true;
     readonly memoryWrite: true;
     readonly memorySearch: true;
+    readonly memoryRecent: true;
   };
 }
 

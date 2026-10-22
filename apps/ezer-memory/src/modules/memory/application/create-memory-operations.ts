@@ -100,11 +100,15 @@ export function createMemoryOperations(
     list(query) {
       return perform(read, "READ_NOT_GRANTED", async () => {
         const result = await persistence.list(individualId, {
+          ...(query.order === undefined ? {} : { order: query.order }),
           ...(query.limit === undefined ? {} : { limit: query.limit }),
           ...(query.cursor === undefined
             ? {}
             : {
                 cursor: {
+                  ...(query.cursor.order === undefined
+                    ? {}
+                    : { order: query.cursor.order }),
                   snapshotSequence: query.cursor.snapshotSequence,
                   afterSequence: query.cursor.afterSequence,
                 },
@@ -124,6 +128,9 @@ export function createMemoryOperations(
               preview: memory.preview,
             })),
             nextCursor: result.value.nextCursor && {
+              ...(result.value.nextCursor.order === undefined
+                ? {}
+                : { order: result.value.nextCursor.order }),
               snapshotSequence: result.value.nextCursor.snapshotSequence,
               afterSequence: result.value.nextCursor.afterSequence,
             },

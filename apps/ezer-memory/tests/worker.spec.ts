@@ -65,6 +65,7 @@ describe("Worker MCP boundary", () => {
           memoryRead: true,
           memoryWrite: true,
           memorySearch: true,
+          memoryRecent: true,
         },
       });
     } finally {
@@ -129,6 +130,7 @@ describe("Worker MCP boundary", () => {
       memoryRead: true,
       memoryWrite: true,
       memorySearch: true,
+      memoryRecent: true,
     });
   });
 

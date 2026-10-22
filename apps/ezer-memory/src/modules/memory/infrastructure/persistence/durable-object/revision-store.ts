@@ -42,18 +42,22 @@ export function createRevisionStore(session: SqlSession): RevisionStore {
       )[0];
       return row ? toRevision(row) : null;
     },
-    list(snapshotSequence, afterSequence, limit) {
+    list(snapshotSequence, afterSequence, limit, order = "oldest") {
+      const newest = order === "newest";
+      const comparison = newest ? (afterSequence === 0 ? "<=" : "<") : ">";
+      const position =
+        newest && afterSequence === 0 ? snapshotSequence : afterSequence;
       return session
         .query<RevisionRow>(
           `SELECT r.* FROM revisions r
-         WHERE r.change_sequence > ? AND r.change_sequence <= ?
+         WHERE r.change_sequence ${comparison} ? AND r.change_sequence <= ?
            AND NOT EXISTS (
              SELECT 1 FROM revisions newer
              WHERE newer.memory_id = r.memory_id
                AND newer.revision > r.revision AND newer.change_sequence <= ?
            )
-         ORDER BY r.change_sequence ASC LIMIT ?`,
-          afterSequence,
+         ORDER BY r.change_sequence ${newest ? "DESC" : "ASC"} LIMIT ?`,
+          position,
           snapshotSequence,
           snapshotSequence,
           limit,
