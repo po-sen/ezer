@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { X509Certificate } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { createAcceptanceFixture } from "./acceptance/index.ts";
 
@@ -8,6 +10,17 @@ test(
   async (t) => {
     const fixture = await createAcceptanceFixture();
     t.after(() => fixture.close());
+    const certificates = readFileSync(fixture.caFile, "utf8").match(
+      /-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/g,
+    );
+    assert.ok(certificates?.length);
+    const endpointCertificate = new X509Certificate(certificates.at(-1)!);
+    assert.equal(
+      endpointCertificate.ca,
+      false,
+      "The HTTPS endpoint needs a leaf certificate",
+    );
+    assert.equal(endpointCertificate.checkIP("127.0.0.1"), "127.0.0.1");
     const first = await fixture.client("alpha");
     const saved = await first.callTool({
       name: "ezer_remember",

@@ -84,6 +84,7 @@ export async function runHostSession(input: {
       cwd: input.workspace,
       env: {
         ...process.env,
+        CODEX_CA_CERTIFICATE: input.caFile,
         NODE_EXTRA_CA_CERTS: input.caFile,
         SSL_CERT_FILE: input.caFile,
       },
