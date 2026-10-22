@@ -71,11 +71,11 @@ memory. Worker outbound requests are limited to the fixture's public JWKS.
 
 ## Observed results (2026-10-23)
 
-| Layer                  | Version                        | Result                                                                                                    |
-| ---------------------- | ------------------------------ | --------------------------------------------------------------------------------------------------------- |
-| Built Worker / MCP SDK | Locked repository dependencies | Passed the full 167-test repository check, including HTTPS persistence and streaming.                     |
-| Codex                  | 0.163.0 on macOS               | Passed all five native scenarios with two installed instances and fresh model sessions.                   |
-| Claude Code            | Not rerun                      | Skipped at the maintainer's request because paid access is unavailable. Compatibility remains unverified. |
+| Layer                  | Version                        | Result                                                                                  |
+| ---------------------- | ------------------------------ | --------------------------------------------------------------------------------------- |
+| Built Worker / MCP SDK | Locked repository dependencies | Passed the full 167-test repository check, including HTTPS persistence and streaming.   |
+| Codex                  | 0.163.0 on macOS               | Passed all five native scenarios with two installed instances and fresh model sessions. |
+| Claude Code            | Not rerun                      | Skipped at the maintainer's request. Compatibility remains unverified.                  |
 
 `pnpm --filter @ezer/memory test:hosts --host codex` exited successfully with
 `notRun: 0`. It observed these native calls and independently checked stored data:
