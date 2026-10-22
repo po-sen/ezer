@@ -77,7 +77,8 @@ Its native prompt renderer exposed the qualified skill, and its `plugin/read`
 catalog recognized the packaged MCP server. A separate model probe read the skill
 and connection reference but could not discover the instance's tools. Testing
 normal configuration, isolated configuration, and the compatibility overlay did
-not produce a successful native call. The remaining loading/discovery cause is
+not produce a successful native call. A direct-MCP control using isolated CLI
+configuration also exposed no tool calls. The remaining loading/discovery cause is
 unresolved; this is not evidence that native Codex continuity works.
 
 Claude Code returned: “Your organization has disabled Claude subscription access

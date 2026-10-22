@@ -75,7 +75,7 @@ export async function createAcceptanceFixture() {
         "-new",
         "-x509",
         "-key",
-        "/dev/stdin",
+        "-",
         "-sha256",
         "-days",
         "1",
@@ -90,7 +90,7 @@ export async function createAcceptanceFixture() {
     );
     if (certificate.status !== 0)
       throw new Error(
-        "Acceptance TLS setup requires OpenSSL with -addext support",
+        "Acceptance TLS generation failed; OpenSSL with -addext and stdin key support is required",
       );
     const cert = certificate.stdout;
     const caFile = join(root, "public-ca.pem");
