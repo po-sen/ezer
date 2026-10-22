@@ -74,6 +74,9 @@ export function createMemoryPersistence(
               preview: memory.preview,
             })),
             nextCursor: result.value.nextCursor && {
+              ...(result.value.nextCursor.order === undefined
+                ? {}
+                : { order: result.value.nextCursor.order }),
               snapshotSequence: result.value.nextCursor.snapshotSequence,
               afterSequence: result.value.nextCursor.afterSequence,
             },

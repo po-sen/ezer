@@ -27,9 +27,14 @@ const read = z.strictObject({
   revision: z.number().optional(),
 });
 const page = z.strictObject({
+  order: z.enum(["oldest", "newest"]).optional(),
   limit: z.number().optional(),
   cursor: z
-    .strictObject({ snapshotSequence: z.number(), afterSequence: z.number() })
+    .strictObject({
+      order: z.literal("newest").optional(),
+      snapshotSequence: z.number(),
+      afterSequence: z.number(),
+    })
     .optional(),
 });
 const searchQuery = z.strictObject({
@@ -73,12 +78,23 @@ export function createMemoryRpcHandler(
       if (!parsed.success) return { ok: false, code: "INVALID_INPUT" } as const;
       try {
         return list.execute({
+          ...(parsed.data.order === undefined
+            ? {}
+            : { order: parsed.data.order }),
           ...(parsed.data.limit === undefined
             ? {}
             : { limit: parsed.data.limit }),
           ...(parsed.data.cursor === undefined
             ? {}
-            : { cursor: parsed.data.cursor }),
+            : {
+                cursor: {
+                  ...(parsed.data.cursor.order === undefined
+                    ? {}
+                    : { order: parsed.data.cursor.order }),
+                  snapshotSequence: parsed.data.cursor.snapshotSequence,
+                  afterSequence: parsed.data.cursor.afterSequence,
+                },
+              }),
         });
       } catch {
         return { ok: false, code: "INTERNAL_ERROR" } as const;

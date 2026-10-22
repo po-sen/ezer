@@ -6,12 +6,17 @@ export function createListMemories(unitOfWork: UnitOfWork): ListMemories {
     execute(query) {
       const limit = query.limit ?? 10;
       const cursor = query.cursor;
+      const cursorOrder = cursor?.order ?? "oldest";
+      const order = query.order ?? cursorOrder;
       if (
+        (order !== "oldest" && order !== "newest") ||
         !Number.isSafeInteger(limit) ||
         limit < 1 ||
         limit > 50 ||
         (cursor !== undefined &&
-          (!Number.isSafeInteger(cursor.snapshotSequence) ||
+          (order !== cursorOrder ||
+            (cursor.order !== undefined && cursor.order !== "newest") ||
+            !Number.isSafeInteger(cursor.snapshotSequence) ||
             cursor.snapshotSequence < 0 ||
             !Number.isSafeInteger(cursor.afterSequence) ||
             cursor.afterSequence < 0 ||
@@ -29,6 +34,7 @@ export function createListMemories(unitOfWork: UnitOfWork): ListMemories {
             snapshotSequence,
             cursor?.afterSequence ?? 0,
             limit + 1,
+            order,
           );
           const page = revisions.slice(0, limit);
           return {
@@ -46,6 +52,7 @@ export function createListMemories(unitOfWork: UnitOfWork): ListMemories {
               nextCursor:
                 revisions.length > limit
                   ? {
+                      ...(order === "newest" ? { order } : {}),
                       snapshotSequence,
                       afterSequence: page[page.length - 1]!.changeSequence,
                     }

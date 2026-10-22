@@ -107,11 +107,13 @@ export function registerMemoryTools(
     "ezer_list",
     {
       description:
-        "List memory previews in the authenticated Ezer without knowing their IDs. Requires memory read permission. Pages preserve the first page's snapshot; use nextCursor unchanged. To read exactly the listed content, pass its revision to ezer_read. Start again without a cursor for current memories.",
+        "List memory previews in the authenticated Ezer without knowing their IDs. Requires memory read permission. Defaults to oldest change first; use order: newest to recover recent writes and corrections first. Pages preserve the first page's snapshot and order; use nextCursor unchanged. Omit order when continuing or keep the same value. To read exactly the listed content, pass its revision to ezer_read. Start again without a cursor to change order or see current memories.",
       inputSchema: z.strictObject({
+        order: z.enum(["oldest", "newest"]).optional(),
         limit: z.number().int().min(1).max(50).optional(),
         cursor: z
           .strictObject({
+            order: z.literal("newest").optional(),
             snapshotSequence: z
               .number()
               .int()
@@ -126,8 +128,19 @@ export function registerMemoryTools(
     (input) =>
       respond(() =>
         memory.list({
+          ...(input.order === undefined ? {} : { order: input.order }),
           ...(input.limit === undefined ? {} : { limit: input.limit }),
-          ...(input.cursor === undefined ? {} : { cursor: input.cursor }),
+          ...(input.cursor === undefined
+            ? {}
+            : {
+                cursor: {
+                  ...(input.cursor.order === undefined
+                    ? {}
+                    : { order: input.cursor.order }),
+                  snapshotSequence: input.cursor.snapshotSequence,
+                  afterSequence: input.cursor.afterSequence,
+                },
+              }),
         }),
       ),
   );

@@ -37,6 +37,9 @@ interface Cursor {
   readonly snapshotSequence: number;
   readonly afterSequence: number;
 }
+interface ListingCursor extends Cursor {
+  readonly order?: "newest";
+}
 // Logical individual routing and detached content, never a storage handle or native owner ID.
 export interface MemoryPersistence {
   commit(individualId: string, command: Write): Promise<Result<Receipt>>;
@@ -58,12 +61,16 @@ export interface MemoryPersistence {
   >;
   list(
     individualId: string,
-    query: { readonly limit?: number; readonly cursor?: Cursor },
+    query: {
+      readonly order?: "oldest" | "newest";
+      readonly limit?: number;
+      readonly cursor?: ListingCursor;
+    },
   ): Promise<
     Result<{
       readonly changeSequence: number;
       readonly memories: readonly (Receipt & { readonly preview: string })[];
-      readonly nextCursor: Cursor | null;
+      readonly nextCursor: ListingCursor | null;
     }>
   >;
   search(

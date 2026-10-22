@@ -56,6 +56,10 @@ describe("Memory-owned operation grants", () => {
       ok: false,
       code: "READ_NOT_GRANTED",
     });
+    expect(await operations.list({ order: "newest" })).toEqual({
+      ok: false,
+      code: "READ_NOT_GRANTED",
+    });
     expect(await operations.search({ query: "Synthetic" })).toEqual({
       ok: false,
       code: "READ_NOT_GRANTED",
@@ -250,7 +254,12 @@ describe("Memory pagination invariants", () => {
       { cursor: { snapshotSequence: -1, afterSequence: 0 } },
       { cursor: { snapshotSequence: 3, afterSequence: 4 } },
       { cursor: { snapshotSequence: 3, afterSequence: 0.5 } },
-    ])
+      {
+        order: "oldest",
+        cursor: { order: "newest", snapshotSequence: 3, afterSequence: 2 },
+      },
+      { order: "newest", cursor: { snapshotSequence: 3, afterSequence: 2 } },
+    ] as const)
       expect(list.execute(query)).toEqual({ ok: false, code: "INVALID_INPUT" });
     expect(within).not.toHaveBeenCalled();
   });
@@ -262,5 +271,52 @@ describe("Memory pagination invariants", () => {
       },
     });
     expect(list.execute({})).toEqual({ ok: false, code: "UNAVAILABLE" });
+  });
+
+  it("preserves ordering in detached list requests and pages", async () => {
+    const gateway = persistence();
+    const cursor = {
+      order: "newest" as const,
+      snapshotSequence: 3,
+      afterSequence: 3,
+    };
+    const stored = {
+      individualId: "native-owner",
+      changeSequence: 3,
+      memories: [
+        {
+          memoryId: "memory",
+          revision: 1,
+          recordedAt: "2026-10-01T00:00:00Z",
+          changeSequence: 2,
+          preview: "text",
+          body: "private full body",
+        },
+      ],
+      nextCursor: { ...cursor, afterSequence: 2 },
+    };
+    gateway.list.mockImplementation(async (individualId, input) => {
+      expect(individualId).toBe("alice");
+      expect(input).toEqual({ order: "newest", cursor });
+      expect(input.cursor).not.toBe(cursor);
+      return { ok: true, value: stored };
+    });
+    const operations = createMemoryOperations(
+      { individualId: "alice", capabilities: { read: true, write: false } },
+      gateway,
+    );
+    const result = await operations.list({ order: "newest", cursor });
+    stored.nextCursor.afterSequence = 1;
+    stored.memories[0]!.preview = "Changed";
+    expect(result).toMatchObject({
+      ok: true,
+      value: {
+        individualId: "alice",
+        memories: [{ preview: "text" }],
+        nextCursor: { order: "newest", snapshotSequence: 3, afterSequence: 2 },
+      },
+    });
+    expect(JSON.stringify(result)).not.toContain("native-owner");
+    expect(JSON.stringify(result)).not.toContain("private full body");
   });
 });

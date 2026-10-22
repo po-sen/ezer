@@ -78,6 +78,188 @@ async function harness() {
 }
 
 describe("scoped memory MCP operations", () => {
+  it("recovers the newest changes first while preserving snapshots and legacy cursors", async () => {
+    const h = await harness();
+    const writer = await h.client();
+    for (const id of ["a", "b", "c"])
+      value(
+        await writer.callTool({ name: "ezer_remember", arguments: memory(id) }),
+      );
+    value(
+      await writer.callTool({
+        name: "ezer_revise",
+        arguments: {
+          ...memory("a", "correct-a"),
+          expectedRevision: 1,
+          reason: "Recent correction",
+          body: "A revised",
+        },
+      }),
+    );
+    const reader = await h.client("ezer:connect ezer:memory:read", "alias");
+    const legacy = value(
+      await reader.callTool({ name: "ezer_list", arguments: { limit: 1 } }),
+    );
+    expect(legacy.nextCursor).toEqual({
+      snapshotSequence: 4,
+      afterSequence: 2,
+    });
+    expect(legacy.memories).toEqual([
+      expect.objectContaining({ memoryId: "b", revision: 1 }),
+    ]);
+    const first = value(
+      await reader.callTool({
+        name: "ezer_list",
+        arguments: { order: "newest", limit: 1 },
+      }),
+    );
+    expect(first).toMatchObject({
+      individualId: h.alice,
+      changeSequence: 4,
+      memories: [{ memoryId: "a", revision: 2 }],
+      nextCursor: { order: "newest", snapshotSequence: 4, afterSequence: 4 },
+    });
+    value(
+      await writer.callTool({
+        name: "ezer_revise",
+        arguments: {
+          ...memory("b", "correct-b"),
+          expectedRevision: 1,
+          reason: "Later correction",
+          body: "B revised",
+        },
+      }),
+    );
+    value(
+      await writer.callTool({ name: "ezer_remember", arguments: memory("d") }),
+    );
+    await evictDurableObject(env.EZER_MEMORY.getByName(`ezer:v1:${h.alice}`));
+    const second = value(
+      await reader.callTool({
+        name: "ezer_list",
+        arguments: { limit: 1, cursor: first.nextCursor },
+      }),
+    );
+    expect(second).toMatchObject({
+      changeSequence: 4,
+      memories: [{ memoryId: "c", revision: 1 }],
+      nextCursor: { order: "newest", snapshotSequence: 4, afterSequence: 3 },
+    });
+    const last = value(
+      await reader.callTool({
+        name: "ezer_list",
+        arguments: { order: "newest", limit: 2, cursor: second.nextCursor },
+      }),
+    );
+    expect(last).toMatchObject({
+      changeSequence: 4,
+      memories: [{ memoryId: "b", revision: 1 }],
+      nextCursor: null,
+    });
+    expect(
+      value(
+        await reader.callTool({
+          name: "ezer_read",
+          arguments: { memoryId: "b", revision: 1 },
+        }),
+      ),
+    ).toMatchObject({ memory: { body: memory("b").body } });
+    const current = value(
+      await reader.callTool({
+        name: "ezer_list",
+        arguments: { order: "newest" },
+      }),
+    );
+    expect(current).toMatchObject({
+      changeSequence: 6,
+      memories: [
+        { memoryId: "d", revision: 1 },
+        { memoryId: "b", revision: 2 },
+        { memoryId: "a", revision: 2 },
+        { memoryId: "c", revision: 1 },
+      ],
+      nextCursor: null,
+    });
+    expect(
+      value(
+        await reader.callTool({
+          name: "ezer_list",
+          arguments: { order: "oldest", limit: 1, cursor: legacy.nextCursor },
+        }),
+      ),
+    ).toMatchObject({
+      changeSequence: 4,
+      memories: [{ memoryId: "c", revision: 1 }],
+      nextCursor: { snapshotSequence: 4, afterSequence: 3 },
+    });
+    expect(JSON.stringify(current)).not.toContain(
+      env.EZER_MEMORY.idFromName(`ezer:v1:${h.alice}`).toString(),
+    );
+
+    const other = await h.client(all, "bob");
+    expect(
+      value(
+        await other.callTool({
+          name: "ezer_list",
+          arguments: { order: "newest" },
+        }),
+      ).memories,
+    ).toEqual([]);
+    for (const id of ["w", "x", "y", "z"])
+      value(
+        await other.callTool({ name: "ezer_remember", arguments: memory(id) }),
+      );
+    expect(
+      value(
+        await other.callTool({
+          name: "ezer_list",
+          arguments: { limit: 1, cursor: first.nextCursor },
+        }),
+      ),
+    ).toMatchObject({
+      individualId: h.bob,
+      memories: [{ memoryId: "y" }],
+      nextCursor: { order: "newest", snapshotSequence: 4, afterSequence: 3 },
+    });
+  });
+
+  it("rejects changing order mid-page and malformed ordering at both MCP and RPC", async () => {
+    const h = await harness();
+    const client = await h.client();
+    expect(
+      value(
+        await client.callTool({
+          name: "ezer_list",
+          arguments: { order: "newest" },
+        }),
+      ),
+    ).toMatchObject({ changeSequence: 0, memories: [], nextCursor: null });
+    for (const input of [
+      { order: "recent" },
+      { order: "DESC; DROP TABLE revisions" },
+      { order: null },
+      { cursor: { order: "oldest", snapshotSequence: 0, afterSequence: 0 } },
+      {
+        order: "oldest",
+        cursor: { order: "newest", snapshotSequence: 0, afterSequence: 0 },
+      },
+      { order: "newest", cursor: { snapshotSequence: 0, afterSequence: 0 } },
+      {
+        order: "newest",
+        cursor: { order: "newest", snapshotSequence: 1, afterSequence: 0 },
+      },
+      { order: "newest", individualId: h.bob },
+    ]) {
+      expect(
+        (await client.callTool({ name: "ezer_list", arguments: input }))
+          .isError,
+      ).toBe(true);
+      expect(
+        await env.EZER_MEMORY.getByName(`ezer:v1:${h.alice}`).list(input),
+      ).toEqual({ ok: false, code: "INVALID_INPUT" });
+    }
+  });
+
   it("searches complete bodies with literal multilingual text beyond the first listing page", async () => {
     const h = await harness();
     const client = await h.client();
@@ -420,6 +602,13 @@ describe("scoped memory MCP operations", () => {
       );
       failure(
         await client.callTool({
+          name: "ezer_list",
+          arguments: { order: "newest" },
+        }),
+        "READ_NOT_GRANTED",
+      );
+      failure(
+        await client.callTool({
           name: "ezer_search",
           arguments: { query: "private" },
         }),
@@ -453,6 +642,13 @@ describe("scoped memory MCP operations", () => {
     );
     failure(
       await writer.callTool({ name: "ezer_list", arguments: {} }),
+      "READ_NOT_GRANTED",
+    );
+    failure(
+      await writer.callTool({
+        name: "ezer_list",
+        arguments: { order: "newest" },
+      }),
       "READ_NOT_GRANTED",
     );
     failure(

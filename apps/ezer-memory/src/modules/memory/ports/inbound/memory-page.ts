@@ -9,6 +9,7 @@ export interface MemoryPage {
     readonly changeSequence: number;
   }[];
   readonly nextCursor: {
+    readonly order?: "newest";
     readonly snapshotSequence: number;
     readonly afterSequence: number;
   } | null;

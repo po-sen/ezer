@@ -21,7 +21,11 @@ or consciousness to fill a gap in memory.
    its server association and returned `individualId` for this interaction.
    An installation name is a label, not the individual ID. Service capabilities
    describe implemented operations, not permission to read or write.
-3. Start `ezer_list({"limit": 20})` without a cursor for general orientation.
+3. When `capabilities.memoryRecent` is true, start
+   `ezer_list({"order": "newest", "limit": 20})` without a cursor for general
+   orientation. This puts recently created or corrected memories first. Otherwise,
+   use `ezer_list({"limit": 20})` for compatibility with older servers and explain
+   that the first pages may omit recent context.
    When the request gives useful clues and `capabilities.memorySearch` is true,
    use `ezer_search({"query": "a relevant phrase", "limit": 20})` on this server
    to find memories beyond those first pages. Choose concrete words or short
@@ -32,13 +36,15 @@ or consciousness to fill a gap in memory.
    when useful; do not send sensitive data merely to test a search.
 4. Read relevant listed or searched records with `ezer_read`, passing both
    `memoryId` and `revision`. Previews contain only the first 160 characters
-   and may omit the search match; they are not complete evidence. Both tools
-   order results by change sequence ascending, not relevance or newest first.
+   and may omit the search match; they are not complete evidence. Listing uses
+   the selected change-sequence order; search remains oldest first. Neither ranks
+   relevance, and a recent correction does not make its evidence more trustworthy.
    Follow `nextCursor` unchanged with the same search query when more context
    is useful. Normally inspect up to three pages total before responding;
    disclose partial recovery when it matters and continue when the task needs it.
-   A cursor preserves its first page's snapshot; start without one for current
-   memories. New search phrases always start without a cursor. Search queries
+   A cursor preserves its first page's snapshot and listing order; the cursor
+   alone retains that order on later pages. Start without one for current memories,
+   a different listing order, or a new search phrase. Search queries
    must be nonblank, at most 200 UTF-16 code units, and contain no NUL character.
 5. Answer the user's request using the retrieved evidence and its original scope.
    Only an empty completed listing establishes that no records exist at that
