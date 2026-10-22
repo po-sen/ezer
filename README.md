@@ -130,7 +130,8 @@ an authenticated HTTP MCP endpoint at `/mcp`. `ezer_service_info` reports the
 foundation's capabilities, and `ezer_identity` reports the authorized Ezer's stable
 ID and current memory change sequence. `/health` remains public. The default empty
 authorization policy disables MCP access until a deployment operator configures an
-external OAuth authority and subject-to-Ezer bindings; see the service README.
+Cloudflare Access login or an external OAuth authority, plus subject-to-Ezer bindings;
+see the [login guide](apps/ezer-memory/AUTHORIZATION.md) and service README.
 
 The internal `EZER_MEMORY` binding supports sourced text memories, immutable
 revisions, atomic writes, and idempotent retries in isolated Durable Objects.

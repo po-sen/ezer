@@ -1,3 +1,4 @@
+import { createExecutionContext } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import {
   exportJWK,
@@ -71,10 +72,15 @@ export async function createTestAuthority() {
       request: Request,
       configuration: Env["EZER_AUTHORIZATION"] = policy,
     ) {
-      return worker.fetch!(request, {
-        EZER_MEMORY: env.EZER_MEMORY,
-        EZER_AUTHORIZATION: configuration,
-      });
+      return worker.fetch!(
+        request,
+        {
+          OAUTH_KV: env.OAUTH_KV,
+          EZER_MEMORY: env.EZER_MEMORY,
+          EZER_AUTHORIZATION: configuration,
+        },
+        createExecutionContext(),
+      );
     },
   };
 }

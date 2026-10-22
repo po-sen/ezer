@@ -24,11 +24,17 @@ export function createAccessControl(
         if (!assignments.length)
           return { ok: false, code: "UNASSIGNED_CALLER" };
         if (assignments.length !== 1) return { ok: false, code: "UNAVAILABLE" };
+        if (
+          caller.restrictedIndividualId !== undefined &&
+          caller.restrictedIndividualId !== assignments[0]!.individualId
+        )
+          return { ok: false, code: "UNASSIGNED_CALLER" };
         if (!caller.permissions.includes("connect"))
           return { ok: false, code: "MISSING_PERMISSION" };
         return {
           ok: true,
           individual: {
+            callerId: caller.callerId,
             individualId: assignments[0]!.individualId,
             capabilities: {
               readMemory: caller.permissions.includes("read-memory"),

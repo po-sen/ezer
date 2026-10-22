@@ -24,41 +24,65 @@ import {
   createMemoryPersistence,
 } from "../modules/memory/infrastructure/persistence/durable-object/index.ts";
 
+import { createHttpRouter } from "../delivery/index.ts";
 import metadata from "../../package.json" with { type: "json" };
 import { readWorkerConfiguration } from "../configuration/index.ts";
 import { createAccessControl } from "../modules/access/application/index.ts";
 import { createAccessPolicyReader } from "../modules/access/infrastructure/configuration/index.ts";
 import { createCredentialVerifierFactory } from "../modules/access/infrastructure/jwt/index.ts";
 
+import { createAccessSessionVerifierFactory } from "../modules/access/infrastructure/cloudflare-access/index.ts";
+import { createOAuthAuthority } from "../modules/access/infrastructure/cloudflare-oauth/index.ts";
+import { createAuthorizationHttpHandler } from "../modules/access/delivery/index.ts";
+
 export function createWorker() {
   const describeService = createDescribeMemoryService(metadata.version);
   const createVerifier = createCredentialVerifierFactory();
+  const createSessionVerifier = createAccessSessionVerifierFactory();
   return {
-    fetch: (request: Request, env: Env) => {
+    fetch: async (request: Request, env: Env, context: ExecutionContext) => {
       const configuration = readWorkerConfiguration(env.EZER_AUTHORIZATION);
-      return createMemoryHttpHandler(
-        createConnectMemory(
-          createMemoryAccessGateway(
-            createAccessControl(
-              createAccessPolicyReader(configuration?.bindings),
-              createVerifier(configuration?.jwt),
+      const authority = configuration?.oauth
+        ? createOAuthAuthority(configuration.oauth, env)
+        : undefined;
+      const authorization =
+        authority && configuration?.access
+          ? createAuthorizationHttpHandler(
+              configuration.oauth!.issuer,
+              createAccessControl(
+                createAccessPolicyReader(configuration.bindings),
+                createSessionVerifier(configuration.access),
+              ),
+              authority.oauth,
+              authority.fetch,
+            )
+          : undefined;
+      return createHttpRouter([
+        authorization,
+        createMemoryHttpHandler(
+          createConnectMemory(
+            createMemoryAccessGateway(
+              createAccessControl(
+                createAccessPolicyReader(configuration?.bindings),
+                authority?.verifier ?? createVerifier(configuration?.jwt),
+              ),
             ),
           ),
+          (connection) =>
+            createMemoryMcpHandler(
+              describeService,
+              connection.individualId,
+              createDescribeMemoryBinding(
+                createMemoryStateReader(env.EZER_MEMORY),
+              ),
+              createMemoryOperations(
+                connection,
+                createMemoryPersistence(env.EZER_MEMORY),
+              ),
+            ),
+          configuration?.http,
         ),
-        (connection) =>
-          createMemoryMcpHandler(
-            describeService,
-            connection.individualId,
-            createDescribeMemoryBinding(
-              createMemoryStateReader(env.EZER_MEMORY),
-            ),
-            createMemoryOperations(
-              connection,
-              createMemoryPersistence(env.EZER_MEMORY),
-            ),
-          ),
-        configuration?.http,
-      )(request);
+      ])(request, context);
     },
   } satisfies ExportedHandler<Env>;
 }

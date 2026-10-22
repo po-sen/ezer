@@ -27,10 +27,12 @@ individual's personality or store its memories.
 | Assignment | A server-owned mapping from one caller to one individual. Multiple callers may share the same individual.    |
 | Decision   | A granted individual or a bounded denial/unavailability result, independent of HTTP status and OAuth errors. |
 
-Access owns interpretation of assignment policy. It currently has no database,
-migration history, or persisted sessions. The JWT adapter caches public keys only;
-it does not retain bearer tokens or manage user credentials. Binding changes are
-operator configuration changes, not actions available to the agent.
+Access owns interpretation of assignment policy and consented client grants. Its
+Cloudflare OAuth adapter uses the official library's KV records for registrations,
+consent transactions, grants and tokens. That library owns the storage format;
+there is no Access SQL migration history. JWT and Cloudflare Access adapters cache
+public keys only. Binding changes are operator configuration changes, not actions
+available to the agent.
 
 ## Public contracts and collaboration
 
@@ -40,10 +42,12 @@ exposes these contracts, but is not an allowed cross-context import path:
 
 - `AccessControl.authorize(credential)` returns the authorized logical individual or
   `UNRECOGNIZED_CREDENTIAL`, `UNASSIGNED_CALLER`, `MISSING_PERMISSION`, or `UNAVAILABLE`.
-- `AuthorizedIndividual` carries `individualId` and `readMemory`/`writeMemory`
+- `AuthorizedIndividual` carries `callerId`, `individualId` and `readMemory`/`writeMemory`
   capabilities across the context boundary. No provider claims are exported.
 
-Only [Memory](../memory/README.md)'s consumer-owned
+Access HTTP delivery also consumes the inbound authorization contract to identify
+the consenting caller. The caller ID is not copied into Memory. Across contexts,
+only [Memory](../memory/README.md)'s consumer-owned
 [Access ACL](../memory/infrastructure/acl/access/index.ts) consumes these contracts.
 That adapter implements Memory's own outbound port, translating authorized
 identities and Access decisions into Memory-owned results. Access makes
@@ -57,10 +61,12 @@ is no shared transaction. Bootstrap composes the two contexts through the adapte
 
 Bootstrap composes the use case with `AccessPolicyReader` and `CredentialVerifier`
 outbound ports. Policy contains only caller assignments. Verification accepts
-opaque proof and returns a caller ID with Access permissions, unrecognized proof,
-or unavailability. A replacement verifier needs no JWT fields or provider URLs in
-its contract. The configuration and JWT adapters remain independent infrastructure
-branches. There is no separate domain layer until
+opaque proof and returns a caller ID with Access permissions and an optional
+`restrictedIndividualId`, unrecognized proof, or unavailability. The application
+rejects a restriction that differs from the current assignment. This is an
+Access-owned grant constraint, independent of token format or storage. A replacement verifier needs no JWT fields or provider URLs in
+its contract. Configuration, JWT, Cloudflare Access and Cloudflare OAuth adapters remain
+independent infrastructure branches. There is no separate domain layer until
 domain models need responsibilities beyond this access policy use case.
 
 ## Adapter translations
@@ -84,23 +90,57 @@ It is not an Access use case. Core tests use an opaque ticket and a synthetic
 verifier without JWT, HTTP, or a live provider; integration tests separately verify
 the JWT adapter and protocol behavior.
 
+### Cloudflare Access and hosted OAuth
+
+The `cloudflare-access/` adapter validates the browser's opaque proof against the
+configured Access application's public keys, issuer and audience, then maps the
+verified subject into caller facts. An admitted person can consent to connection,
+read and write permissions; narrower client grants are chosen on the consent page.
+The adapter does not accept host labels, cookies or raw headers as identity facts.
+
+Access delivery calls the existing `AccessControl.authorize` use case for both
+GET and POST consent requests. It displays the assigned Ezer, escapes client data,
+and uses the OAuth library's browser-bound consent helpers. It checks submission
+origin and current caller/assignment before issuing a grant. The resulting grant
+contains the consented individual ID, but never a native storage object ID.
+
+The independent `cloudflare-oauth/` adapter hosts `OAuthAuthorizationServer` and
+validates the resource-bound opaque tokens it issued. It maps the library's user,
+approved scopes and encrypted grant properties into Access-owned caller facts,
+permissions and an individual restriction. It does not import or call the other
+infrastructure adapters. Refresh is issued only after approval of `offline_access`.
+The domain/application/ports never import the library or carry its protocol types.
+
+Service-level HTTP routing dispatches to Access and Memory delivery without
+context knowledge. Bootstrap selects the configured verifier and composes handlers;
+it does not handle consent, transform claims or route protocol requests itself.
+
 ## Outside this context
 
-Access does not implement login, consent, token issuance, refresh, account
-provisioning, or credential storage; these belong to the external authorization
-provider and host OAuth client. It does not choose memory contents, corrections,
-personality, emotions, or recall behavior. OAuth metadata and HTTP/MCP protocol handling belong to
-delivery, and physical memory isolation belongs to Memory's persistence adapter.
+Cloudflare Access owns human sign-in, identity-provider configuration, account
+provisioning and login credentials. Native host clients own their credentials.
+Access does not choose memory contents, corrections, personality, emotions or recall
+behavior. MCP handling belongs to Memory delivery, and physical memory isolation
+belongs to Memory's persistence adapter. There is no Access-to-Memory dependency.
 
 ## Current implementation limits
 
-The JWT adapter accepts RS256/ES256 RFC 9068 access tokens. ID tokens, opaque
-tokens, and API keys are unsupported. Individual token revocation is not
-introspected; removing a subject's configured grant denies subsequent requests.
-One subject maps to one individual per endpoint; multiple independently deployed
-Ezers can use different resource audiences and bindings.
+External JWT mode accepts RS256/ES256 RFC 9068 access tokens; it does not introspect
+individual token revocation. Hosted mode supports official-library opaque tokens,
+15-minute access tokens, seven-day refresh grants and the library's revocation
+endpoint. Neither mode accepts Access browser assertions on `/mcp`.
 
-Tests use synthetic tokens and a mocked public JWKS endpoint. A live provider's
-login flow and native host compatibility still require acceptance testing. See
-the [service README](../../../README.md) for operator configuration, provider
-requirements, public-key caching, and deployment limitations.
+Assignments are rechecked per MCP request. Hosted grants are bound to the consented
+individual, so reassignment cannot move an old grant to a different Ezer. One caller
+maps to one individual per endpoint; independent deployments use distinct audiences,
+OAuth KV namespaces and bindings. Removing an assignment denies subsequent requests.
+
+OAuth KV is eventually consistent; globally atomic replay prevention or instant
+cross-region revocation is not promised. Ending an Access browser session does not
+revoke Ezer grants already issued to native clients. There is no membership or grant
+administration UI, per-person permission ceiling, or automatic scope step-up for
+individual MCP tools. See the [login guide](../../../AUTHORIZATION.md).
+
+Tests use ephemeral synthetic signing keys, mocked public key/CIMD endpoints, local
+KV, the actual OAuth library and MCP SDK. A live Access deployment, native host
+login and cross-computer continuity still require separate acceptance tests.

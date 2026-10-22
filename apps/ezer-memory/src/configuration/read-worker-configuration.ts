@@ -14,51 +14,78 @@ const httpsUrl = z
       url.href === value
     );
   });
-const schema = z
-  .strictObject({
-    issuer: httpsUrl,
-    resource: httpsUrl.refine((value) => new URL(value).pathname === "/mcp"),
-    jwksUri: httpsUrl,
-    bindings: z
-      .array(
-        z.strictObject({
-          subject: z.string().min(1).max(512),
-          individualId: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/),
-        }),
-      )
-      .min(1)
-      .max(256),
-  })
+const bindingsSchema = z
+  .array(
+    z.strictObject({
+      subject: z.string().min(1).max(512),
+      individualId: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/),
+    }),
+  )
+  .min(1)
+  .max(256)
   .refine(
-    (value) =>
-      new Set(value.bindings.map((entry) => entry.subject)).size ===
-      value.bindings.length,
+    (entries) =>
+      new Set(entries.map((entry) => entry.subject)).size === entries.length,
   );
+const resourceSchema = httpsUrl.refine(
+  (value) => new URL(value).pathname === "/mcp",
+);
+const schema = z.union([
+  z.strictObject({
+    issuer: httpsUrl,
+    resource: resourceSchema,
+    jwksUri: httpsUrl,
+    bindings: bindingsSchema,
+  }),
+  z.strictObject({
+    provider: z.literal("cloudflare-access"),
+    resource: resourceSchema,
+    access: z.strictObject({
+      teamDomain: z
+        .string()
+        .regex(
+          /^https:\/\/[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.cloudflareaccess\.com$/,
+        ),
+      audience: z.string().regex(/^[a-f0-9]{64}$/),
+    }),
+    bindings: bindingsSchema,
+  }),
+]);
 
 export function readWorkerConfiguration(configuration: unknown) {
-  // Deployment syntax is translated before it reaches context contracts.
   const parsed = schema.safeParse(configuration);
   if (!parsed.success) return undefined;
-  const { issuer, resource, jwksUri, bindings } = parsed.data;
+  const policy = parsed.data;
+  const { resource, bindings } = policy;
   const connectionScope = "ezer:connect";
   const readScope = "ezer:memory:read";
   const writeScope = "ezer:memory:write";
+  const scopes = [connectionScope, readScope, writeScope, "offline_access"];
+  const hosted = "provider" in policy;
+  const issuer = hosted ? new URL(resource).origin : policy.issuer;
   return {
     bindings,
-    jwt: {
-      issuer,
-      audience: resource,
-      jwksUri,
-      connectionScope,
-      readScope,
-      writeScope,
-    },
+    jwt: hosted
+      ? undefined
+      : {
+          issuer,
+          audience: resource,
+          jwksUri: policy.jwksUri,
+          connectionScope,
+          readScope,
+          writeScope,
+        },
+    access: hosted ? policy.access : undefined,
+    oauth: hosted
+      ? { issuer, resource, scopes, connectionScope, readScope, writeScope }
+      : undefined,
     http: {
       resource,
       authorizationServer: issuer,
       connectionScope,
       readScope,
       writeScope,
+      ...(hosted ? { authorizationScopes: scopes } : {}),
     },
   };
 }
