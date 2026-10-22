@@ -15,3 +15,6 @@ export type { MemoryPageQuery } from "./memory-page-query.ts";
 export type { MemoryPage } from "./memory-page.ts";
 export type { ListMemories } from "./list-memories.ts";
 export type { MemoryOperations } from "./memory-operations.ts";
+export type { MemorySearchQuery } from "./memory-search-query.ts";
+export type { MemorySearchPage } from "./memory-search-page.ts";
+export type { SearchMemories } from "./search-memories.ts";

@@ -4,6 +4,7 @@ import type {
   InspectMemory,
   InspectMemoryState,
   ListMemories,
+  SearchMemories,
 } from "../ports/inbound/index.ts";
 
 const content = {
@@ -31,13 +32,42 @@ const page = z.strictObject({
     .strictObject({ snapshotSequence: z.number(), afterSequence: z.number() })
     .optional(),
 });
+const searchQuery = z.strictObject({
+  query: z.string(),
+  limit: z.number().optional(),
+  cursor: z
+    .strictObject({
+      query: z.string(),
+      snapshotSequence: z.number(),
+      afterSequence: z.number(),
+    })
+    .optional(),
+});
 export function createMemoryRpcHandler(
   commit: CommitMemory,
   inspect: InspectMemory,
   state: InspectMemoryState,
   list: ListMemories,
+  search: SearchMemories,
 ) {
   return {
+    search(input: unknown) {
+      const parsed = searchQuery.safeParse(input);
+      if (!parsed.success) return { ok: false, code: "INVALID_INPUT" } as const;
+      try {
+        return search.execute({
+          query: parsed.data.query,
+          ...(parsed.data.limit === undefined
+            ? {}
+            : { limit: parsed.data.limit }),
+          ...(parsed.data.cursor === undefined
+            ? {}
+            : { cursor: parsed.data.cursor }),
+        });
+      } catch {
+        return { ok: false, code: "INTERNAL_ERROR" } as const;
+      }
+    },
     list(input: unknown) {
       const parsed = page.safeParse(input);
       if (!parsed.success) return { ok: false, code: "INVALID_INPUT" } as const;

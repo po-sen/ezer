@@ -60,6 +60,27 @@ export function createRevisionStore(session: SqlSession): RevisionStore {
         )
         .map(toRevision);
     },
+    search(query, snapshotSequence, afterSequence, limit) {
+      // shortcut: This scans bodies; add an index when measured query cost warrants it.
+      return session
+        .query<RevisionRow>(
+          `SELECT r.* FROM revisions r
+         WHERE r.change_sequence > ? AND r.change_sequence <= ?
+           AND NOT EXISTS (
+             SELECT 1 FROM revisions newer
+             WHERE newer.memory_id = r.memory_id
+               AND newer.revision > r.revision AND newer.change_sequence <= ?
+           )
+           AND instr(lower(r.body), lower(?)) > 0
+         ORDER BY r.change_sequence ASC LIMIT ?`,
+          afterSequence,
+          snapshotSequence,
+          snapshotSequence,
+          query,
+          limit,
+        )
+        .map(toRevision);
+    },
     append(revision) {
       session.query(
         `INSERT INTO revisions

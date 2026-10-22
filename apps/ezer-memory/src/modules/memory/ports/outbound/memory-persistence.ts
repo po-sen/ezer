@@ -66,4 +66,18 @@ export interface MemoryPersistence {
       readonly nextCursor: Cursor | null;
     }>
   >;
+  search(
+    individualId: string,
+    query: {
+      readonly query: string;
+      readonly limit?: number;
+      readonly cursor?: Cursor & { readonly query: string };
+    },
+  ): Promise<
+    Result<{
+      readonly changeSequence: number;
+      readonly memories: readonly (Receipt & { readonly preview: string })[];
+      readonly nextCursor: (Cursor & { readonly query: string }) | null;
+    }>
+  >;
 }

@@ -120,8 +120,11 @@ skills cannot enforce isolation inside a model's shared context.
 On activation, the skill confirms identity, lists bounded memory previews, and
 reads relevant complete revisions. During interaction the agent chooses what
 to preserve, links evidence, and reconciles corrections. It has no fixed
-personality schema or reserved memory IDs. Listing is paginated, ordered by
-change sequence ascending, and is not semantic search.
+personality schema or reserved memory IDs. Listing and literal body search are paginated and ordered by
+change sequence ascending. The agent chooses search phrases and reads complete
+matching revisions; search is not semantic, and an empty result does not establish
+that the Ezer has no memories. The skill falls back to bounded listing when an
+older server does not advertise `memorySearch`.
 
 Installation makes the skill available. It does not guarantee activation in
 every conversation, background reflection, consciousness, or identical behavior
@@ -138,13 +141,16 @@ After deploying and configuring real login, verify with synthetic information:
    recovery; a prior receipt or cursor is not proof of current contents.
 4. Activate a different instance. Verify that it cannot retrieve A's record and
    does not substitute A's tools when its own connection is unavailable.
-5. Test missing read/write grants, partial pagination, an unavailable service,
+5. Search for a concrete phrase after the relevant memory is beyond the first
+   listing pages. Verify that the agent reads the matching revision, distinguishes
+   no match from no memories, and starts a new search after a correction.
+6. Test missing read/write grants, partial pagination, an unavailable service,
    and concurrent corrections. Verify honest limits rather than invented recall
    or duplicate writes.
 
 These are host/model acceptance checks, not guarantees from static validation.
 Local package and backend tests do not establish remote login or cross-computer
-continuity. Physical deletion, backup/restore, search, and attachments are not
+continuity. Physical deletion, backup/restore, semantic search, and attachments are not
 provided by this plugin.
 
 ## Packaging rationale

@@ -51,6 +51,7 @@ describe("Worker MCP boundary", () => {
         "ezer_read",
         "ezer_revise",
         "ezer_list",
+        "ezer_search",
       ]);
       const result = await client.callTool({
         name: "ezer_service_info",
@@ -60,7 +61,11 @@ describe("Worker MCP boundary", () => {
       expect(result.structuredContent).toMatchObject({
         name: "ezer-memory",
         stage: "foundation",
-        capabilities: { memoryRead: true, memoryWrite: true },
+        capabilities: {
+          memoryRead: true,
+          memoryWrite: true,
+          memorySearch: true,
+        },
       });
     } finally {
       await client.close();
@@ -123,6 +128,7 @@ describe("Worker MCP boundary", () => {
     expect(result.result.structuredContent.capabilities).toEqual({
       memoryRead: true,
       memoryWrite: true,
+      memorySearch: true,
     });
   });
 

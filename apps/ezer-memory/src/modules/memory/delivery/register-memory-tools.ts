@@ -131,4 +131,35 @@ export function registerMemoryTools(
         }),
       ),
   );
+  server.registerTool(
+    "ezer_search",
+    {
+      description:
+        "Search memory bodies in the authenticated Ezer by a literal substring, ignoring ASCII letter case. Requires memory read permission. Matches the latest revision of each memory at the first page's snapshot. No wildcard, semantic, or source-field search. Previews are the first 160 characters and may omit the match; use ezer_read with the returned memoryId and revision. Keep query and nextCursor unchanged for subsequent pages; restart without a cursor for current memories.",
+      inputSchema: z.strictObject({
+        query: z.string().min(1).max(200),
+        limit: z.number().int().min(1).max(50).optional(),
+        cursor: z
+          .strictObject({
+            query: z.string().min(1).max(200),
+            snapshotSequence: z
+              .number()
+              .int()
+              .min(0)
+              .max(Number.MAX_SAFE_INTEGER),
+            afterSequence: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+          })
+          .optional(),
+      }),
+      annotations,
+    },
+    (input) =>
+      respond(() =>
+        memory.search({
+          query: input.query,
+          ...(input.limit === undefined ? {} : { limit: input.limit }),
+          ...(input.cursor === undefined ? {} : { cursor: input.cursor }),
+        }),
+      ),
+  );
 }
