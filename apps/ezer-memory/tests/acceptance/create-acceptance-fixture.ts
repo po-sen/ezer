@@ -68,14 +68,17 @@ export async function createAcceptanceFixture() {
     // Synthetic TLS and JWT private keys remain in memory for this run only.
     const tlsPair = generateKeyPairSync("rsa", { modulusLength: 2048 });
     const key = tlsPair.privateKey.export({ type: "pkcs8", format: "pem" });
+    // Linux cannot reopen Node's socket-backed stdin as a key file; use a pipe.
     const certificate = spawnSync(
-      "openssl",
+      "sh",
       [
-        "req",
+        "-c",
+        'cat | openssl req "$@"',
+        "ezer-acceptance",
         "-new",
         "-x509",
         "-key",
-        "-",
+        "/dev/stdin",
         "-sha256",
         "-days",
         "1",
