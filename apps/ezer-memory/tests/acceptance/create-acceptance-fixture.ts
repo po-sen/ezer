@@ -87,7 +87,8 @@ export async function createAcceptanceFixture() {
         "-addext",
         "subjectAltName=IP:127.0.0.1",
         "-addext",
-        "basicConstraints=critical,CA:TRUE",
+        // Strict TLS clients reject a CA certificate used as a server leaf.
+        "basicConstraints=critical,CA:FALSE",
       ],
       { input: key, encoding: "utf8", timeout: 30000 },
     );
