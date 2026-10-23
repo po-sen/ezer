@@ -54,13 +54,27 @@ fixture tools. No permission bypass is used. Host settings and managed policy ca
 still affect availability; these are acceptance checks on that host, not a clean-room
 claim about every installation.
 
-The scenarios are learning, recall after runtime restart, correction, recall of
-the corrected fact, and absence of that fact in the other individual. Recall
+The seven scenarios cover autonomous learning, recall after runtime restart,
+correction, recall of the corrected fact, another individual's isolation, an
+explicit storage opt-out, and a fresh conversation after that opt-out. Recall
 prompts deliberately omit the expected value. Evidence includes observed MCP
 calls, the model's answer, and backend results; saying a write succeeded is not
 sufficient. Each invocation has a two-minute timeout. The command reports bounded
 JSON status records and exits nonzero on a failed or blocked scenario. It does not
 save raw model transcripts or provider diagnostics.
+
+The learning prompt states a longstanding daily preference and asks for a breakfast
+pairing. It does not ask the agent to remember, save, or prepare for a later
+conversation. Passing requires a sourced `ezer_remember` call, a persisted record,
+and a source excerpt that actually occurs in that prompt. This tests autonomous
+selection during an explicitly activated Ezer interaction, not background activity.
+
+The opt-out prompt asks for an ordinary recommendation while forbidding storage of
+that message, summaries, inferences, and source excerpts. Passing requires an
+answer to the request, no `ezer_remember` or `ezer_revise` attempts, and an unchanged
+memory listing and change sequence. After another Worker restart, a fresh session
+must report that the preference is not stored and leave memory unchanged again.
+These checks concern Ezer memory; they do not test the host provider's retention.
 
 The loopback gateway assigns a synthetic caller and signs its fixture credential.
 The actual Worker still validates the signature, grants, and identity through its
@@ -71,22 +85,28 @@ memory. Worker outbound requests are limited to the fixture's public JWKS.
 
 ## Observed results (2026-10-23)
 
-| Layer                  | Version                        | Result                                                                                  |
-| ---------------------- | ------------------------------ | --------------------------------------------------------------------------------------- |
-| Built Worker / MCP SDK | Locked repository dependencies | Passed the full 167-test repository check, including HTTPS persistence and streaming.   |
-| Codex                  | 0.163.0 on macOS               | Passed all five native scenarios with two installed instances and fresh model sessions. |
-| Claude Code            | Not rerun                      | Skipped at the maintainer's request. Compatibility remains unverified.                  |
+| Layer                  | Version                        | Result                                                                                   |
+| ---------------------- | ------------------------------ | ---------------------------------------------------------------------------------------- |
+| Built Worker / MCP SDK | Locked repository dependencies | Passed the full 167-test repository check, including HTTPS persistence and streaming.    |
+| Codex                  | 0.163.0 on macOS               | Passed all seven native scenarios with two installed instances and fresh model sessions. |
+| Claude Code            | Not rerun                      | Skipped at the maintainer's request. Compatibility remains unverified.                   |
 
 `pnpm --filter @ezer/memory test:hosts --host codex` exited successfully with
 `notRun: 0`. It observed these native calls and independently checked stored data:
 
-| Scenario                                  | Evidence                                                                                                                                                      |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Learn                                     | `ezer_service_info`, `ezer_identity`, and `ezer_remember`; revision 1 contains the synthetic preference and source.                                           |
-| Fresh-session recall after Worker restart | `ezer_list` and `ezer_read`; the answer contains the saved value omitted from the prompt.                                                                     |
-| Correction                                | `ezer_read` and `ezer_revise`; revision 2 contains the new preference and a reason, while revision 1 remains readable.                                        |
-| Corrected recall                          | `ezer_list` and `ezer_read`; a fresh conversation returns the corrected value omitted from the prompt.                                                        |
-| Other individual                          | The second instance's `ezer_identity` and `ezer_list`; no stored preference is claimed, its listing is empty, and it cannot read the first instance's record. |
+| Scenario                                  | Evidence                                                                                                                                                                 |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Autonomous learning                       | `ezer_service_info`, `ezer_identity`, and `ezer_remember` without a save request; revision 1 contains the preference and a source excerpt from the actual prompt.        |
+| Fresh-session recall after Worker restart | `ezer_list` and `ezer_read`; the answer contains the saved value omitted from the prompt.                                                                                |
+| Correction                                | `ezer_read` and `ezer_revise`; revision 2 contains the new preference and a reason, while revision 1 remains readable.                                                   |
+| Corrected recall                          | `ezer_list` and `ezer_read`; a fresh conversation returns the corrected value omitted from the prompt.                                                                   |
+| Other individual                          | The second instance's `ezer_identity` and `ezer_list`; no stored preference is claimed, its listing is empty, and it cannot read the first instance's record.            |
+| Do not store                              | `ezer_identity`, `ezer_service_info`, and `ezer_list`; the answer uses the current message while no write is attempted and the listing/change sequence remain unchanged. |
+| Recall after opt-out                      | `ezer_identity`, `ezer_list`, and `ezer_search`; after restart, a fresh session reports `NO_STORED_DESSERT`, with no write or memory-state change.                       |
+
+The existing shared skill passed unchanged. This is one completed run of these
+synthetic scenarios, not a reliability estimate across models or arbitrary
+conversations. Selection of memories remains the agent's responsibility.
 
 ### Resolved Codex fixture failure
 
