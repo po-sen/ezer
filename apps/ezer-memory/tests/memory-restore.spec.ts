@@ -109,6 +109,30 @@ it("restores complete history with atomic visibility, restart, exact retries, an
   const reader = await h.client();
   const restorer = await h.client(restoreOnly);
   const whole = archive(h.id);
+  const status = { name: "ezer_restore_status", arguments: {} };
+  expect(value(await restorer.callTool(status))).toEqual({ restore: null });
+  failure(await reader.callTool(status), "RESTORE_NOT_GRANTED");
+  const connected = await h.client("ezer:connect");
+  failure(await connected.callTool(status), "RESTORE_NOT_GRANTED");
+  expect(
+    (
+      await restorer.callTool({
+        ...status,
+        arguments: { individualId: `${h.id}-other` },
+      })
+    ).isError,
+  ).toBe(true);
+  expect(
+    (await restorer.callTool({ ...status, arguments: { restoreId: "other" } }))
+      .isError,
+  ).toBe(true);
+  const metadata = (await restorer.listTools()).tools.find(
+    (tool) => tool.name === status.name,
+  );
+  expect(metadata?.annotations).toMatchObject({
+    readOnlyHint: true,
+    destructiveHint: false,
+  });
   const restore = (p: MemoryExportPage, restoreId = "restore-one") =>
     restorer.callTool({
       name: "ezer_restore",
@@ -155,6 +179,9 @@ it("restores complete history with atomic visibility, restart, exact retries, an
     value(await reader.callTool({ name: "ezer_identity", arguments: {} })),
   ).toMatchObject({ changeSequence: 0 });
   await evictDurableObject(h.stub);
+  const fresh = await h.client(restoreOnly);
+  expect(value(await fresh.callTool(status))).toEqual({ restore: first });
+  expect(value(await fresh.callTool(status))).toEqual({ restore: first });
   expect(value(await restore(page(whole, 0)))).toEqual(first);
   failure(await restore(page(whole, 2)), "RESTORE_CONFLICT");
   failure(
@@ -169,6 +196,14 @@ it("restores complete history with atomic visibility, restart, exact retries, an
     "RESTORE_CONFLICT",
   );
   value(await restore(page(whole, 1)));
+  expect(value(await fresh.callTool(status))).toEqual({
+    restore: {
+      restoreId: "restore-one",
+      snapshotSequence: 3,
+      restoredSequence: 2,
+      complete: false,
+    },
+  });
   value(await restore(page(whole, 2)));
   expect(
     value(await reader.callTool({ name: "ezer_export", arguments: {} })),
@@ -197,8 +232,17 @@ it("restores complete history with atomic visibility, restart, exact retries, an
   expect(
     value(await reader.callTool({ name: "ezer_identity", arguments: {} })),
   ).toMatchObject({ changeSequence: 4 });
+  expect(value(await fresh.callTool(status))).toEqual({
+    restore: {
+      restoreId: "restore-one",
+      snapshotSequence: 3,
+      restoredSequence: 3,
+      complete: true,
+    },
+  });
   failure(await restore(whole, "another-restore"), "RESTORE_CONFLICT");
   const other = await h.client(restoreOnly, "bob");
+  expect(value(await other.callTool(status))).toEqual({ restore: null });
   failure(
     await other.callTool({
       name: "ezer_restore",
@@ -284,6 +328,11 @@ it("rejects malformed history without keeping any part of a failing page", async
     expect(
       value(await reader.callTool({ name: "ezer_export", arguments: {} })),
     ).toMatchObject({ snapshotSequence: 0, revisions: [] });
+    expect(
+      value(
+        await restorer.callTool({ name: "ezer_restore_status", arguments: {} }),
+      ),
+    ).toEqual({ restore: null });
   }
   value(
     await restorer.callTool({
@@ -303,6 +352,18 @@ it("rejects malformed history without keeping any part of a failing page", async
       })
     ).isError,
   ).toBe(true);
+  expect(
+    value(
+      await restorer.callTool({ name: "ezer_restore_status", arguments: {} }),
+    ),
+  ).toEqual({
+    restore: {
+      restoreId: "attempt",
+      snapshotSequence: 3,
+      restoredSequence: 1,
+      complete: false,
+    },
+  });
   expect(
     value(
       await restorer.callTool({
@@ -344,6 +405,11 @@ it("refuses nonempty targets and serializes a racing normal write against restor
   ]);
   expect([written, restored].filter((r) => !r.isError)).toHaveLength(1);
   if (!written.isError) {
+    expect(
+      value(
+        await restorer.callTool({ name: "ezer_restore_status", arguments: {} }),
+      ),
+    ).toEqual({ restore: null });
     failure(restored, "TARGET_NOT_EMPTY");
     expect(
       value(
@@ -371,6 +437,18 @@ it("supports an empty archive and full escaped pages without truncation", async 
     complete: true,
   });
   value(await restorer.callTool(command));
+  expect(
+    value(
+      await restorer.callTool({ name: "ezer_restore_status", arguments: {} }),
+    ),
+  ).toEqual({
+    restore: {
+      restoreId: "empty",
+      snapshotSequence: 0,
+      restoredSequence: 0,
+      complete: true,
+    },
+  });
   failure(
     await restorer.callTool({
       name: "ezer_restore",

@@ -79,6 +79,10 @@ restore grant. Pending restoration blocks ordinary content reads/writes until
 atomic completion; identity exposes only the published sequence (0 while pending).
 Preserve exact historical fields and retry safety. Never add overwrite, cross-identity
 transfer, automatic reset, or cancel without explicit behavior design.
+Restore status uses the restore grant, exposes only the current authorized
+individual's session metadata, and remains available while content access is
+blocked. Null status does not establish empty memory; completed progress excludes
+later writes. A status query does not authorize resumption.
 Worker declarations are generated with `wrangler types`; commit the output after
 configuration, export, or Wrangler changes. Never hand-edit or format
 `apps/ezer-memory/worker-configuration.d.ts`. The full check rejects stale types

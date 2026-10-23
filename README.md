@@ -151,6 +151,9 @@ On request, the plugin can export complete revision history as versioned JSON
 pages, including original sources and superseded content. Export uses a fixed
 snapshot and read permission; restore uses a separate grant and accepts only the same Ezer into empty memory,
 preserving complete history. It does not merge or overwrite existing data.
+`ezer_restore_status` exposes only restoration metadata with the same independent
+restore grant, so a new conversation can diagnose and explicitly resume an
+interruption with the original archive. A status query performs no restore writes.
 
 ```sh
 pnpm --filter @ezer/memory dev

@@ -11,6 +11,7 @@ import {
 } from "../src/modules/memory/application/index.ts";
 
 import { createMemoryRpcHandler } from "../src/modules/memory/delivery/index.ts";
+import { createInspectMemoryRestore } from "../src/modules/memory/application/index.ts";
 import type { MemoryWrite } from "../src/modules/memory/ports/inbound/index.ts";
 import { PersistenceFault } from "../src/modules/memory/ports/outbound/index.ts";
 import type {
@@ -161,6 +162,10 @@ describe("memory application orchestration", () => {
       },
     };
     const commit = createCommitMemory(failed, h.fingerprints, () => now);
+    expect(createInspectMemoryRestore(failed).execute()).toEqual({
+      ok: false,
+      code: "UNAVAILABLE",
+    });
     const inspect = createInspectMemory(failed);
     expect(createInspectMemoryState(failed).execute()).toEqual({
       ok: false,
@@ -191,6 +196,7 @@ describe("memory application orchestration", () => {
       createSearchMemories(broken),
       createExportMemoryHistory(broken),
       createRestoreMemoryHistory(broken),
+      createInspectMemoryRestore(broken),
     );
     expect(await rpc.commit(command())).toEqual({
       ok: false,
@@ -201,6 +207,7 @@ describe("memory application orchestration", () => {
       code: "INTERNAL_ERROR",
     });
     expect(rpc.inspectState()).toEqual({ ok: false, code: "INTERNAL_ERROR" });
+    expect(rpc.inspectRestore()).toEqual({ ok: false, code: "INTERNAL_ERROR" });
     expect(rpc.exportHistory({})).toEqual({
       ok: false,
       code: "INTERNAL_ERROR",

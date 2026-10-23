@@ -50,6 +50,16 @@ export function registerMemoryTools(
   memory: MemoryOperations,
 ) {
   server.registerTool(
+    "ezer_restore_status",
+    {
+      description:
+        "Read restoration progress for the authenticated Ezer. Requires memory restore permission, independently of read/write permission. Returns restore: null when no restore session exists; this does not prove empty memory. Otherwise returns the original restoreId, snapshotSequence, restoredSequence, and complete. No memory contents. A pending session requires the original complete archive and an explicit request to resume; status alone cannot verify archive contents or authorize writes.",
+      inputSchema: z.strictObject({}),
+      annotations,
+    },
+    () => respond(() => memory.inspectRestore()),
+  );
+  server.registerTool(
     "ezer_restore",
     {
       description:

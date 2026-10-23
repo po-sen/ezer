@@ -37,6 +37,10 @@ export class EzerMemory extends DurableObject<Env> {
   inspectState() {
     return this.#memory.inspectState();
   }
+
+  inspectRestore() {
+    return this.#memory.inspectRestore();
+  }
 }
 
 export default createWorker();
