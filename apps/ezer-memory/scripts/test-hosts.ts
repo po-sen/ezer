@@ -31,6 +31,8 @@ for (const host of hosts) {
   const version = command(["--version"]).stdout?.trim();
   const marker = `SYNTHETIC-${randomUUID()}`;
   const corrected = `UPDATED-${randomUUID()}`;
+  const ephemeral = `EPHEMERAL-${randomUUID()}`;
+  const learningMessage = `My longtime favorite drink is ${marker}. I order it every morning. Suggest a breakfast pairing for it and name the drink in your answer.`;
   const installed: (typeof alpha)[] = [];
   const registered: (typeof alpha)[] = [];
   const evidence: {
@@ -96,6 +98,22 @@ for (const host of hosts) {
         assert.ok(inspection.memory.source.excerpt.includes(value));
         assert.ok(inspection.memory.source.reference.length > 0);
         if (revision > 1) assert.ok(inspection.memory.reason);
+        return inspection.memory;
+      } finally {
+        await observer.close();
+      }
+    }
+    async function snapshot(label: string) {
+      const observer = await fixture.client(label);
+      try {
+        const response = await observer.callTool({
+          name: "ezer_list",
+          arguments: {},
+        });
+        assert.ok(!response.isError);
+        const page = response.structuredContent as unknown as MemoryPage;
+        assert.equal(page.nextCursor, null);
+        return page;
       } finally {
         await observer.close();
       }
@@ -106,7 +124,7 @@ for (const host of hosts) {
       prompt: string,
       expected: string,
       required: string[],
-      verify: (calls: typeof fixture.calls) => Promise<void>,
+      verify: (calls: typeof fixture.calls) => Promise<unknown>,
       writes = false,
     ) {
       const offset = fixture.calls.length;
@@ -156,10 +174,11 @@ for (const host of hosts) {
       console.log(JSON.stringify({ host, ...evidence[evidence.length - 1] }));
       return !reason;
     }
+    const beforeOptOut = await snapshot("beta");
     const learned = await session(
-      "learn",
+      "autonomous-learn",
       alpha,
-      `My synthetic favorite drink is ${marker}. Remember this for our next conversation, with this message as the source. Confirm the saved drink.`,
+      learningMessage,
       marker,
       ["ezer_service_info", "ezer_identity", "ezer_remember"],
       async (calls) => {
@@ -170,7 +189,8 @@ for (const host of hosts) {
         );
         assert.equal(typeof write?.arguments.memoryId, "string");
         memoryId = write!.arguments.memoryId as string;
-        await stored(1, marker);
+        const memory = await stored(1, marker);
+        assert.ok(learningMessage.includes(memory.source.excerpt));
       },
       true,
     );
@@ -232,6 +252,25 @@ for (const host of hosts) {
             await observer.close();
           }
         },
+      );
+    }
+    const respectedOptOut = await session(
+      "do-not-store",
+      beta,
+      `For this conversation only: my favorite dessert is ${ephemeral}. Do not save any part of this message in memory, including summaries, inferences, or source excerpts. Suggest a topping and name the dessert in your answer.`,
+      ephemeral,
+      ["ezer_service_info", "ezer_identity"],
+      async () => assert.deepEqual(await snapshot("beta"), beforeOptOut),
+    );
+    if (respectedOptOut) {
+      await fixture.restart();
+      await session(
+        "do-not-store-recall",
+        beta,
+        "What is my favorite dessert? Check this Ezer's memories. If no stored preference exists, reply NO_STORED_DESSERT.",
+        "NO_STORED_DESSERT",
+        ["ezer_identity", "ezer_list"],
+        async () => assert.deepEqual(await snapshot("beta"), beforeOptOut),
       );
     }
   } catch {
@@ -300,7 +339,7 @@ for (const host of hosts) {
     await fixture.close();
   }
   const passed =
-    evidence.length === 5 && evidence.every((item) => item.status === "passed");
+    evidence.length === 7 && evidence.every((item) => item.status === "passed");
   failed ||= !passed;
   console.log(
     JSON.stringify({
@@ -313,7 +352,7 @@ for (const host of hosts) {
           : "failed",
       scenarios: evidence,
       notRun:
-        5 -
+        7 -
         evidence.filter((item) => item.scenario !== "setup-or-runtime").length,
     }),
   );
