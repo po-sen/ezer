@@ -7,6 +7,38 @@ export function createMemoryPersistence(
   namespace: Env["EZER_MEMORY"],
 ): MemoryPersistence {
   return {
+    async exportHistory(individualId, query) {
+      try {
+        const result = await namespace
+          .getByName(`ezer:v1:${individualId}`)
+          .exportHistory(query);
+        if (!result.ok) return result;
+        return {
+          ok: true,
+          value: {
+            snapshotSequence: result.value.snapshotSequence,
+            revisions: result.value.revisions.map((revision) => ({
+              memoryId: revision.memoryId,
+              revision: revision.revision,
+              body: revision.body,
+              source: {
+                reference: revision.source.reference,
+                excerpt: revision.source.excerpt,
+              },
+              reason: revision.reason,
+              recordedAt: revision.recordedAt,
+              changeSequence: revision.changeSequence,
+            })),
+            nextCursor: result.value.nextCursor && {
+              snapshotSequence: result.value.nextCursor.snapshotSequence,
+              afterSequence: result.value.nextCursor.afterSequence,
+            },
+          },
+        };
+      } catch {
+        throw new PersistenceFault();
+      }
+    },
     async commit(individualId, command) {
       try {
         const result = await namespace

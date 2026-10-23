@@ -91,6 +91,16 @@ it("exercises SQLite-owned migrations and Stores without the Durable Object adap
       expect(revisions.list(3, 0, 1)).toEqual([correction]);
       expect(revisions.list(3, 2, 10)).toEqual([other]);
       expect(revisions.list(3, 0, 10)).toEqual([correction, other]);
+      expect(revisions.history(0, 0, 10)).toEqual([]);
+      expect(revisions.history(3, 0, 10)).toEqual([
+        revision,
+        correction,
+        other,
+      ]);
+      expect(revisions.history(3, 0, 1)).toEqual([revision]);
+      expect(revisions.history(3, 1, 1)).toEqual([correction]);
+      expect(revisions.history(2, 1, 10)).toEqual([correction]);
+      expect(revisions.history(3, 3, 10)).toEqual([]);
       expect(revisions.list(0, 0, 10, "newest")).toEqual([]);
       expect(revisions.list(1, 0, 10, "newest")).toEqual([revision]);
       expect(revisions.list(3, 0, 1, "newest")).toEqual([other]);
@@ -127,6 +137,9 @@ it("exercises SQLite-owned migrations and Stores without the Durable Object adap
         changeSequence: Number.MAX_SAFE_INTEGER,
       };
       revisions.append(boundary);
+      expect(revisions.history(Number.MAX_SAFE_INTEGER, 4, 10)).toEqual([
+        boundary,
+      ]);
       expect(revisions.list(Number.MAX_SAFE_INTEGER, 0, 1, "newest")).toEqual([
         boundary,
       ]);

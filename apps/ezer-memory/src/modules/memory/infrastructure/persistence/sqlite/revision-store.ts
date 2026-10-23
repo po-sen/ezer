@@ -27,6 +27,16 @@ function toRevision(row: RevisionRow) {
 }
 export function createRevisionStore(session: SqlSession): RevisionStore {
   return {
+    history(snapshotSequence, afterSequence, limit) {
+      return session
+        .query<RevisionRow>(
+          "SELECT * FROM revisions WHERE change_sequence > ? AND change_sequence <= ? ORDER BY change_sequence ASC LIMIT ?",
+          afterSequence,
+          snapshotSequence,
+          limit,
+        )
+        .map(toRevision);
+    },
     find(memoryId, revision) {
       const row = (
         revision === undefined

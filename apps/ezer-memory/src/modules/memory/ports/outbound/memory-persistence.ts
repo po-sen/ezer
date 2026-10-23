@@ -42,6 +42,23 @@ interface ListingCursor extends Cursor {
 }
 // Logical individual routing and detached content, never a storage handle or native owner ID.
 export interface MemoryPersistence {
+  exportHistory(
+    individualId: string,
+    query: { readonly limit?: number; readonly cursor?: Cursor },
+  ): Promise<
+    Result<{
+      readonly snapshotSequence: number;
+      readonly revisions: readonly (Receipt & {
+        readonly body: string;
+        readonly source: {
+          readonly reference: string;
+          readonly excerpt: string;
+        };
+        readonly reason: string | null;
+      })[];
+      readonly nextCursor: Cursor | null;
+    }>
+  >;
   commit(individualId: string, command: Write): Promise<Result<Receipt>>;
   inspect(
     individualId: string,

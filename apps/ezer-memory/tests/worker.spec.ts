@@ -52,6 +52,7 @@ describe("Worker MCP boundary", () => {
         "ezer_revise",
         "ezer_list",
         "ezer_search",
+        "ezer_export",
       ]);
       const result = await client.callTool({
         name: "ezer_service_info",
@@ -66,6 +67,7 @@ describe("Worker MCP boundary", () => {
           memoryWrite: true,
           memorySearch: true,
           memoryRecent: true,
+          memoryExport: true,
         },
       });
     } finally {
@@ -131,6 +133,7 @@ describe("Worker MCP boundary", () => {
       memoryWrite: true,
       memorySearch: true,
       memoryRecent: true,
+      memoryExport: true,
     });
   });
 

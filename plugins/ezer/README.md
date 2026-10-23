@@ -130,6 +130,13 @@ matching revisions; search is not semantic, and an empty result does not establi
 that the Ezer has no memories. The skill falls back to bounded listing when an
 older server does not advertise `memorySearch`.
 
+On an explicit export request, the skill uses `ezer_export` when `memoryExport`
+is advertised. It preserves versioned JSON pages of complete revision history,
+including superseded content and sources, through the final cursor. It checks
+identity and snapshot continuity and reports partial output honestly. Export
+requires read permission; the user chooses its destination. See the packaged
+[export instructions](skills/ezer/references/exporting-memories.md).
+
 Installation makes the skill available. It does not guarantee activation in
 every conversation, background reflection, consciousness, or identical behavior
 across models. Explicit activation is the alpha acceptance path. The plugin
@@ -159,7 +166,7 @@ The repository's [local acceptance runner](../../apps/ezer-memory/ACCEPTANCE.md)
 exercises generated packages with isolated synthetic services, and can run real
 Codex/Claude Code sessions separately from CI.
 Local package and backend tests do not establish remote login or cross-computer
-continuity. Physical deletion, backup/restore, semantic search, and attachments are not
+continuity. Physical deletion, import/restore, verified disaster-recovery backup, semantic search, and attachments are not
 provided by this plugin.
 
 ## Packaging rationale

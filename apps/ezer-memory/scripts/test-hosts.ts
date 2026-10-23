@@ -5,6 +5,7 @@ import { parseArgs } from "node:util";
 import type {
   MemoryInspection,
   MemoryPage,
+  MemoryExportPage,
 } from "../src/modules/memory/ports/inbound/index.ts";
 import {
   createAcceptanceFixture,
@@ -124,7 +125,7 @@ for (const host of hosts) {
       prompt: string,
       expected: string,
       required: string[],
-      verify: (calls: typeof fixture.calls) => Promise<unknown>,
+      verify: (calls: typeof fixture.calls, answer: string) => Promise<unknown>,
       writes = false,
     ) {
       const offset = fixture.calls.length;
@@ -156,7 +157,7 @@ for (const host of hosts) {
                 : null);
       if (!reason) {
         try {
-          await verify(calls);
+          await verify(calls, result.answer);
         } catch {
           reason = "stored-memory-mismatch";
         }
@@ -337,6 +338,61 @@ for (const host of hosts) {
         },
       );
     }
+    const beforeExport = await Promise.all([
+      snapshot("alpha"),
+      snapshot("beta"),
+    ]);
+    const exportPages: MemoryExportPage[] = [];
+    const observer = await fixture.client("alpha");
+    try {
+      let cursor: MemoryExportPage["nextCursor"] = null;
+      do {
+        const result = await observer.callTool({
+          name: "ezer_export",
+          arguments: { limit: 1, ...(cursor === null ? {} : { cursor }) },
+        });
+        assert.ok(!result.isError);
+        const page = result.structuredContent as unknown as MemoryExportPage;
+        exportPages.push(page);
+        assert.ok(exportPages.length <= 20);
+        cursor = page.nextCursor;
+      } while (cursor !== null);
+    } finally {
+      await observer.close();
+    }
+    await session(
+      "complete-history-export",
+      alpha,
+      "Export this Ezer's complete memory history, including superseded revisions and sources. Use ezer_export with limit 1 and follow every nextCursor until null. Return only a JSON array of the complete unmodified page objects, in order, without Markdown fences or commentary. The conversation reply is the requested destination; do not create files.",
+      marker,
+      ["ezer_identity", "ezer_service_info", "ezer_export"],
+      async (calls, answer) => {
+        assert.deepEqual(JSON.parse(answer), exportPages);
+        for (let i = 0; i < exportPages.length; i++) {
+          const expectedCursor =
+            i === 0 ? undefined : exportPages[i - 1]!.nextCursor!;
+          assert.ok(
+            calls.some((call) => {
+              const cursor = call.arguments.cursor as
+                MemoryExportPage["nextCursor"] | undefined;
+              return (
+                call.tool === "ezer_export" &&
+                call.arguments.limit === 1 &&
+                (expectedCursor === undefined
+                  ? cursor === undefined
+                  : cursor?.snapshotSequence ===
+                      expectedCursor.snapshotSequence &&
+                    cursor?.afterSequence === expectedCursor.afterSequence)
+              );
+            }),
+          );
+        }
+        assert.deepEqual(
+          await Promise.all([snapshot("alpha"), snapshot("beta")]),
+          beforeExport,
+        );
+      },
+    );
   } catch {
     evidence.push({
       scenario: "setup-or-runtime",
@@ -403,7 +459,8 @@ for (const host of hosts) {
     await fixture.close();
   }
   const passed =
-    evidence.length === 9 && evidence.every((item) => item.status === "passed");
+    evidence.length === 10 &&
+    evidence.every((item) => item.status === "passed");
   failed ||= !passed;
   console.log(
     JSON.stringify({
@@ -416,7 +473,7 @@ for (const host of hosts) {
           : "failed",
       scenarios: evidence,
       notRun:
-        9 -
+        10 -
         evidence.filter((item) => item.scenario !== "setup-or-runtime").length,
     }),
   );

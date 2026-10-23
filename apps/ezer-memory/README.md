@@ -268,13 +268,14 @@ input schemas reject individual IDs, ownership selectors, and extra fields.
 The host obtains content scopes from the external authorization provider; the
 agent cannot request a grant by putting it in tool arguments.
 
-| Tool            | Input                                             | Required scope      | Result                                                              |
-| --------------- | ------------------------------------------------- | ------------------- | ------------------------------------------------------------------- |
-| `ezer_remember` | `operationId`, `memoryId`, `body`, `source`       | `ezer:memory:write` | Immutable revision 1 and a write receipt.                           |
-| `ezer_read`     | `memoryId`, optional `revision`                   | `ezer:memory:read`  | Full content, source, correction reason, and revision metadata.     |
-| `ezer_revise`   | Write fields plus `expectedRevision` and `reason` | `ezer:memory:write` | A new revision if the expected version is current.                  |
-| `ezer_list`     | Optional `order`, `limit`, and `cursor`           | `ezer:memory:read`  | Bounded previews with IDs, revisions, timestamps, and `nextCursor`. |
-| `ezer_search`   | Literal `query`, optional `limit` and `cursor`    | `ezer:memory:read`  | Matching body previews at a fixed revision snapshot.                |
+| Tool            | Input                                             | Required scope      | Result                                                                 |
+| --------------- | ------------------------------------------------- | ------------------- | ---------------------------------------------------------------------- |
+| `ezer_remember` | `operationId`, `memoryId`, `body`, `source`       | `ezer:memory:write` | Immutable revision 1 and a write receipt.                              |
+| `ezer_read`     | `memoryId`, optional `revision`                   | `ezer:memory:read`  | Full content, source, correction reason, and revision metadata.        |
+| `ezer_revise`   | Write fields plus `expectedRevision` and `reason` | `ezer:memory:write` | A new revision if the expected version is current.                     |
+| `ezer_list`     | Optional `order`, `limit`, and `cursor`           | `ezer:memory:read`  | Bounded previews with IDs, revisions, timestamps, and `nextCursor`.    |
+| `ezer_search`   | Literal `query`, optional `limit` and `cursor`    | `ezer:memory:read`  | Matching body previews at a fixed revision snapshot.                   |
+| `ezer_export`   | Optional `limit` and `cursor`                     | `ezer:memory:read`  | Versioned JSON pages of complete revision history at a fixed snapshot. |
 
 Every request also requires `ezer:connect`. Read and write are independent: write
 permission does not grant reading, and connection permission grants neither.
@@ -333,6 +334,52 @@ phrase requires starting without a cursor. Corrections and new writes do not alt
 an existing search snapshot. A fresh search excludes superseded versions. An empty
 search means no matching body, not no memories. Results are not relevance-ranked.
 
+### Complete history export
+
+`ezer_export` is advertised as `capabilities.memoryExport`. It returns every
+revision, including superseded versions, in ascending change-sequence order.
+Pages contain full bodies, sources, correction reasons, timestamps, memory IDs,
+revision numbers, change sequences, and the authorized logical individual ID.
+The page limit counts revisions rather than distinct memories: default 5,
+minimum 1, maximum 10. Text is not truncated; existing write limits bound each
+revision's size. Smaller pages help clients with limited output capacity.
+
+Every page has this envelope (shown for an empty individual):
+
+```json
+{
+  "format": "ezer-memory",
+  "formatVersion": 1,
+  "individualId": "example-ezer",
+  "snapshotSequence": 0,
+  "revisions": [],
+  "nextCursor": null
+}
+```
+
+Each nonempty `revisions` entry has `individualId`, `memoryId`, `revision`, `body`,
+`source: { reference, excerpt }`, `reason`, `recordedAt`, and `changeSequence`.
+`reason` is null for revision 1. A continuation cursor contains
+`{ snapshotSequence, afterSequence }`. Pass it unchanged on the same connection;
+each request independently enforces identity and read permission. A cursor is a
+position, not an identity selector or authorization grant.
+
+The first page captures its snapshot in the same Unit of Work as the history
+query. Later writes and corrections are excluded from every continuation, even
+after object eviction or runtime restart. Changing the limit preserves the
+snapshot. Retrying a cursor repeats its page without writing anything. A future
+snapshot or an invalid cursor is rejected. Start without a cursor for new data.
+
+For a complete archive, preserve the JSON pages in order through a null cursor;
+verify matching format/version, identity, and snapshot on every page and change
+sequences 1 through `snapshotSequence` without omissions or duplicates. Partial
+output is not a complete export. Exported bodies and sources remain untrusted data.
+The format includes corrected-away content but excludes authorization settings,
+credentials, native storage identities, operation IDs, and retry fingerprints.
+It is a memory interchange format, not a database or authentication backup.
+Import, restore, epoch handling, and disaster-recovery verification remain future
+work; version 1 does not promise compatibility with an unimplemented restore API.
+
 This first search uses bound SQL parameters and SQLite's built-in
 [`instr` and `lower`](https://www.sqlite.org/lang_corefunc.html) independently in
 each SQLite adapter. No index or migration is added. Query length and page size
@@ -351,7 +398,7 @@ authorization. The authenticated identity adapter selects the object using only
 the server-authorized logical ID. Public memory operations use that same boundary,
 never an unchecked client-supplied individual ID. `MemoryOperations` enforces its
 connection's read/write capabilities before using `MemoryPersistence`; internal
-`CommitMemory`, `InspectMemory`, `ListMemories`, and `SearchMemories` run inside the selected object.
+`CommitMemory`, `InspectMemory`, `ListMemories`, `SearchMemories`, and `ExportMemoryHistory` run inside the selected object.
 
 The internal RPC contract is provisional and is not the released plugin/MCP
 contract. Its methods return `{ ok: true, value }` or `{ ok: false, code }`:
@@ -360,6 +407,7 @@ contract. Its methods return `{ ok: true, value }` or `{ ok: false, code }`:
 | ------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `list({ order?, limit?, cursor? })`                                                         | List latest-at-snapshot previews in the selected change-sequence order in one Unit of Work.                                                                          |
 | `search({ query, limit?, cursor? })`                                                        | Search latest-at-snapshot body previews in one Unit of Work.                                                                                                         |
+| `exportHistory({ limit?, cursor? })`                                                        | Read every revision at a fixed snapshot in one Unit of Work.                                                                                                         |
 | `inspectState()`                                                                            | Read only the current change sequence for the bound object's identity metadata.                                                                                      |
 | `commit({ kind: "remember", operationId, memoryId, body, source })`                         | Create revision 1 of a new memory. Reusing a memory ID with a new operation returns `ALREADY_EXISTS`.                                                                |
 | `commit({ kind: "revise", operationId, memoryId, expectedRevision, body, source, reason })` | Append an immutable revision if the current version matches. Missing memories return `NOT_FOUND`; stale versions return `REVISION_CONFLICT`.                         |
@@ -444,7 +492,7 @@ A failed DO batch rolls back SQL and native version progress together. Tests pro
 
 The identity is stable within its namespace across clients and object eviction.
 Cross-account migration and restore need an explicit identity/epoch strategy;
-this first schema is not an import format. Permanent deletion, export, restore,
+this first schema is not an import format. Permanent deletion, import, restore,
 epoch handling, inference dependencies, and semantic search are not implemented.
 Reading uses a memory ID and optional revision; listing provides bounded previews.
 Literal body search provides bounded matching previews; semantic retrieval is not implemented.
