@@ -15,6 +15,7 @@ export function createMemoryAccessGateway(
             capabilities: {
               read: result.individual.capabilities.readMemory,
               write: result.individual.capabilities.writeMemory,
+              restore: result.individual.capabilities.restoreMemory,
             },
           };
         switch (result.code) {

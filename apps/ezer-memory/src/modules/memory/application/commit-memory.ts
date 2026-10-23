@@ -56,6 +56,9 @@ export function createCommitMemory(
           ]),
         );
         return unitOfWork.within((stores) => {
+          const restoring = stores.restore.read();
+          if (restoring && !restoring.complete)
+            return { ok: false, code: "RESTORE_IN_PROGRESS" } as const;
           const state = stores.state.read();
           const previous = stores.operations.find(command.operationId);
           if (previous) {

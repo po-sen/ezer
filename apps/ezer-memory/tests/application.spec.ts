@@ -7,6 +7,7 @@ import {
   createListMemories,
   createSearchMemories,
   createExportMemoryHistory,
+  createRestoreMemoryHistory,
 } from "../src/modules/memory/application/index.ts";
 
 import { createMemoryRpcHandler } from "../src/modules/memory/delivery/index.ts";
@@ -30,6 +31,7 @@ function command(): MemoryWrite {
 function harness() {
   const calls: string[] = [];
   const stores: MemoryStores = {
+    restore: { read: () => null, start: () => {}, complete: () => {} },
     state: {
       read: () => {
         calls.push("state");
@@ -188,6 +190,7 @@ describe("memory application orchestration", () => {
       createListMemories(broken),
       createSearchMemories(broken),
       createExportMemoryHistory(broken),
+      createRestoreMemoryHistory(broken),
     );
     expect(await rpc.commit(command())).toEqual({
       ok: false,

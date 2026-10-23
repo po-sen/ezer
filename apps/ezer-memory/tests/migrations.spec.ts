@@ -16,6 +16,34 @@ function individual() {
 }
 
 describe("versioned SQL migrations in SQLite Durable Objects", () => {
+  it("upgrades the released baseline without changing memories or retry receipts", async () => {
+    await runInDurableObject(
+      individual(),
+      async (_instance, { storage, id }) => {
+        await storage.deleteAll();
+        migrateMemory(storage, [migrations[0]!]);
+        initializeIndividual(storage, id.toString());
+        storage.sql.exec(
+          "INSERT INTO revisions VALUES ('old', 1, 'Preserved', 'test:old', 'Evidence', NULL, '2026-09-30T00:00:00.000Z', 1)",
+        );
+        storage.sql.exec(
+          "INSERT INTO operations VALUES ('old-op', 'old-digest', 'old', 1)",
+        );
+        storage.sql.exec("UPDATE state SET change_sequence = 1");
+        const before = ["state", "revisions", "operations"].map((table) =>
+          storage.sql.exec(`SELECT * FROM ${table}`).toArray(),
+        );
+        migrateMemory(storage);
+        expect(
+          ["state", "revisions", "operations"].map((table) =>
+            storage.sql.exec(`SELECT * FROM ${table}`).toArray(),
+          ),
+        ).toEqual(before);
+        expect(storage.sql.exec("SELECT * FROM restore").toArray()).toEqual([]);
+        expect(storage.kv.get("memory:schema-version")).toBe(2);
+      },
+    );
+  });
   it("rolls back a failed first installation without leaving SQL or a version ledger", async () => {
     await runInDurableObject(individual(), async (_instance, { storage }) => {
       // This unique test database contains synthetic fixtures only.
@@ -36,7 +64,7 @@ describe("versioned SQL migrations in SQLite Durable Objects", () => {
           .toArray(),
       ).toEqual([]);
       migrateMemory(storage);
-      expect(storage.kv.get("memory:schema-version")).toBe(1);
+      expect(storage.kv.get("memory:schema-version")).toBe(migrations.length);
     });
   });
 
@@ -52,20 +80,22 @@ describe("versioned SQL migrations in SQLite Durable Objects", () => {
         "UPDATE state SET change_sequence = 1 WHERE singleton = 1",
       );
       const original = storage.sql.exec("SELECT * FROM revisions").toArray();
-      expect(storage.kv.get("memory:schema-version")).toBe(1);
+      expect(storage.kv.get("memory:schema-version")).toBe(migrations.length);
       initializeIndividual(storage, id.toString());
       migrateMemory(storage);
       const next = [
         ...migrations,
         {
-          idMonotonicInc: 2,
+          idMonotonicInc: migrations.length + 1,
           description: "synthetic upgrade",
           sql: "ALTER TABLE state ADD COLUMN upgrade_marker TEXT NOT NULL DEFAULT 'preserved';",
         },
       ];
       migrateMemory(storage, next);
       migrateMemory(storage, next);
-      expect(storage.kv.get("memory:schema-version")).toBe(2);
+      expect(storage.kv.get("memory:schema-version")).toBe(
+        migrations.length + 1,
+      );
       expect(
         storage.sql
           .exec("SELECT individual_id, upgrade_marker FROM state")
@@ -87,9 +117,12 @@ describe("versioned SQL migrations in SQLite Durable Objects", () => {
   it("reverses and recreates the SQL baseline through explicit forward compensation", async () => {
     await runInDurableObject(individual(), (_instance, { storage }) => {
       const down = {
-        idMonotonicInc: 2,
+        idMonotonicInc: migrations.length + 1,
         description: "synthetic baseline reversal",
-        sql: reversals[0]!.sql,
+        sql: [...reversals]
+          .reverse()
+          .map((m) => m.sql)
+          .join("\n"),
       };
       migrateMemory(storage, [...migrations, down]);
       const tables = storage.sql
@@ -101,14 +134,18 @@ describe("versioned SQL migrations in SQLite Durable Objects", () => {
       expect(tables).not.toContain("state");
       expect(tables).not.toContain("revisions");
       expect(tables).not.toContain("operations");
-      expect(storage.kv.get("memory:schema-version")).toBe(2);
+      expect(storage.kv.get("memory:schema-version")).toBe(
+        migrations.length + 1,
+      );
       const up = {
-        idMonotonicInc: 3,
+        idMonotonicInc: migrations.length + 2,
         description: "synthetic baseline recreation",
-        sql: migrations[0]!.sql,
+        sql: migrations.map((m) => m.sql).join("\n"),
       };
       migrateMemory(storage, [...migrations, down, up]);
-      expect(storage.kv.get("memory:schema-version")).toBe(3);
+      expect(storage.kv.get("memory:schema-version")).toBe(
+        migrations.length + 2,
+      );
       expect(storage.sql.exec("SELECT * FROM revisions").toArray()).toEqual([]);
     });
   });
@@ -116,12 +153,12 @@ describe("versioned SQL migrations in SQLite Durable Objects", () => {
   it("rolls back DDL, data, and native migration progress on failure; a fresh runner can retry", async () => {
     await runInDurableObject(individual(), (_instance, { storage, id }) => {
       const broken = {
-        idMonotonicInc: 2,
+        idMonotonicInc: migrations.length + 1,
         description: "synthetic failure",
         sql: "CREATE TABLE upgrade_probe (value TEXT); UPDATE state SET individual_id = 'wrong'; INSERT INTO missing_table VALUES (1);",
       };
       expect(() => migrateMemory(storage, [...migrations, broken])).toThrow();
-      expect(storage.kv.get("memory:schema-version")).toBe(1);
+      expect(storage.kv.get("memory:schema-version")).toBe(migrations.length);
       expect(
         storage.sql
           .exec("SELECT name FROM sqlite_master WHERE name = 'upgrade_probe'")
@@ -135,7 +172,9 @@ describe("versioned SQL migrations in SQLite Durable Objects", () => {
         sql: "CREATE TABLE upgrade_probe (value TEXT);",
       };
       migrateMemory(storage, [...migrations, fixed]);
-      expect(storage.kv.get("memory:schema-version")).toBe(2);
+      expect(storage.kv.get("memory:schema-version")).toBe(
+        migrations.length + 1,
+      );
     });
   });
 

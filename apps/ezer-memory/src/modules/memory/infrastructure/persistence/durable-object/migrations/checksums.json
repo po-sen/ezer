@@ -1,4 +1,6 @@
 {
   "000001_memory_initial.up.sql": "a67ee71e44a95249c245fed83a0ad5dbc862aa5b7cfb9c04fee78503881dd247",
-  "000001_memory_initial.down.sql": "64452e9103f9868a2c2a48853939748ba75c3c9b97d1063742c54903cabf3d88"
+  "000001_memory_initial.down.sql": "64452e9103f9868a2c2a48853939748ba75c3c9b97d1063742c54903cabf3d88",
+  "000002_restore.up.sql": "fa026ad636cc976dabbee67670404bd6281c56c9193c8db5ee7595a23cd80d34",
+  "000002_restore.down.sql": "e2da7059fde60a30dfa0d9679a2958ac65feacca04c5e901ae6d9f75faae9b15"
 }

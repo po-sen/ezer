@@ -12,7 +12,11 @@ function provider(): AccessControl {
       individual: {
         callerId: "caller-a",
         individualId: "ezer-alice",
-        capabilities: { readMemory: false, writeMemory: false },
+        capabilities: {
+          readMemory: false,
+          writeMemory: false,
+          restoreMemory: false,
+        },
       },
     }),
   };
@@ -24,7 +28,11 @@ describe("Memory's consumer-owned Access ACL", () => {
       callerId: "caller-a",
       individualId: "ezer-alice",
       providerDetail: "synthetic principal",
-      capabilities: { readMemory: false, writeMemory: false },
+      capabilities: {
+        readMemory: false,
+        writeMemory: false,
+        restoreMemory: false,
+      },
     };
     const access: AccessControl = {
       authorize: async () => ({ ok: true, individual }),
@@ -35,7 +43,7 @@ describe("Memory's consumer-owned Access ACL", () => {
     expect(result).toEqual({
       status: "authorized",
       individualId: "ezer-alice",
-      capabilities: { read: false, write: false },
+      capabilities: { read: false, write: false, restore: false },
     });
   });
 
@@ -48,7 +56,7 @@ describe("Memory's consumer-owned Access ACL", () => {
       expect(await gateway.resolveIndividual(credential)).toEqual({
         status: "authorized",
         individualId: "ezer-alice",
-        capabilities: { read: false, write: false },
+        capabilities: { read: false, write: false, restore: false },
       });
       expect(authorize).toHaveBeenCalledExactlyOnceWith(credential);
     },
@@ -80,15 +88,18 @@ describe("Memory's consumer-owned Access ACL", () => {
   );
 
   it.each([
-    [true, false],
-    [false, true],
-    [true, true],
+    [true, false, false],
+    [false, true, false],
+    [true, true, false],
+    [false, false, true],
+    [true, true, true],
   ])(
-    "translates and detaches read=%s write=%s grants",
-    async (readMemory, writeMemory) => {
+    "translates and detaches read=%s write=%s restore=%s grants",
+    async (readMemory, writeMemory, restoreMemory) => {
       const capabilities = {
         readMemory,
         writeMemory,
+        restoreMemory,
         foreignDetail: "ignored",
       };
       const access: AccessControl = {
@@ -106,10 +117,15 @@ describe("Memory's consumer-owned Access ACL", () => {
       ).execute("synthetic");
       capabilities.readMemory = false;
       capabilities.writeMemory = false;
+      capabilities.restoreMemory = false;
       expect(result).toEqual({
         ok: true,
         individualId: "ezer-alice",
-        capabilities: { read: readMemory, write: writeMemory },
+        capabilities: {
+          read: readMemory,
+          write: writeMemory,
+          restore: restoreMemory,
+        },
       });
     },
   );
@@ -131,7 +147,7 @@ describe("Memory connection use case", () => {
     const identity = {
       status: "authorized" as const,
       individualId: "ezer-alice",
-      capabilities: { read: false, write: false },
+      capabilities: { read: false, write: false, restore: false },
     };
     const gateway: MemoryAccessGateway = {
       resolveIndividual: async () => identity,
@@ -142,7 +158,7 @@ describe("Memory connection use case", () => {
     expect(result).toEqual({
       ok: true,
       individualId: "ezer-alice",
-      capabilities: { read: false, write: false },
+      capabilities: { read: false, write: false, restore: false },
     });
   });
 
@@ -184,7 +200,11 @@ describe("Memory connection use case", () => {
         individual: {
           callerId: "caller-a",
           individualId,
-          capabilities: { readMemory: false, writeMemory: false },
+          capabilities: {
+            readMemory: false,
+            writeMemory: false,
+            restoreMemory: false,
+          },
         },
       });
       const mcp = vi.fn(() => ({
@@ -199,6 +219,7 @@ describe("Memory connection use case", () => {
           connectionScope: "ezer:connect",
           readScope: "ezer:memory:read",
           writeScope: "ezer:memory:write",
+          restoreScope: "ezer:memory:restore",
         },
       );
       const response = await handler(new Request("https://memory.test/mcp"));

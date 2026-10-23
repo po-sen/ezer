@@ -9,7 +9,12 @@ export function createInspectMemoryState(
       try {
         return unitOfWork.within((stores) => ({
           ok: true,
-          value: { changeSequence: stores.state.read().changeSequence },
+          value: {
+            changeSequence:
+              stores.restore.read()?.complete === false
+                ? 0
+                : stores.state.read().changeSequence,
+          },
         }));
       } catch (error) {
         if (error instanceof PersistenceFault)

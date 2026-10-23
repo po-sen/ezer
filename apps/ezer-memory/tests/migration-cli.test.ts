@@ -75,7 +75,7 @@ test("SQLite CLI has read-only status, persistent upgrades, and safe argument er
   database.close();
   const status = cli("sqlite", ["status", "--database", path]);
   assert.equal(status.status, 0, status.stderr);
-  assert.equal(JSON.parse(status.stdout).pending, 1);
+  assert.equal(JSON.parse(status.stdout).pending, 2);
   const untouched = new DatabaseSync(path);
   assert.equal(
     untouched.prepare("SELECT count(*) AS count FROM sqlite_master").get()
@@ -98,7 +98,7 @@ test("SQLite CLI has read-only status, persistent upgrades, and safe argument er
     reopened
       .prepare("SELECT max(version) AS version FROM schema_migrations")
       .get()?.version,
-    1,
+    2,
   );
   reopened.close();
   const invalid = cli("sqlite", ["--unknown=SYNTHETIC_PRIVATE_MARKER"]);
@@ -115,11 +115,11 @@ test("SQLite rolls back failed upgrades and rejects edited, missing, or newer hi
   await migrateMemory(database, createMigrationRunner(database, migrations));
   database.exec("INSERT INTO state VALUES (1, 'synthetic-owner', 0)");
   writeFileSync(
-    join(migrations, "000002.do.test.sql"),
+    join(migrations, "000003.do.test.sql"),
     "CREATE TABLE failed_upgrade (id INTEGER); INSERT INTO missing_table VALUES (1);",
   );
   writeFileSync(
-    join(migrations, "000002.undo.test.sql"),
+    join(migrations, "000003.undo.test.sql"),
     "DROP TABLE failed_upgrade;",
   );
   pin(migrations);
@@ -136,21 +136,21 @@ test("SQLite rolls back failed upgrades and rejects edited, missing, or newer hi
     database
       .prepare("SELECT max(version) AS version FROM schema_migrations")
       .get()?.version,
-    1,
+    2,
   );
   assert.equal(
     database.prepare("SELECT individual_id FROM state").get()?.individual_id,
     "synthetic-owner",
   );
   writeFileSync(
-    join(migrations, "000002.do.test.sql"),
+    join(migrations, "000003.do.test.sql"),
     "CREATE TABLE recovered_upgrade (id INTEGER);",
   );
   pin(migrations);
   assert.equal(
     (await migrateMemory(database, createMigrationRunner(database, migrations)))
       .currentVersion,
-    2,
+    3,
   );
   writeFileSync(join(migrations, "000001.do.memory_initial.sql"), "SELECT 1;");
   assert.throws(() => createMigrationRunner(database, migrations), /checksum/);
@@ -160,7 +160,7 @@ test("SQLite rolls back failed upgrades and rejects edited, missing, or newer hi
     /checksum/,
   );
   database.exec(
-    "INSERT INTO schema_migrations (version, md5) VALUES (3, 'synthetic')",
+    "INSERT INTO schema_migrations (version, md5) VALUES (4, 'synthetic')",
   );
   await assert.rejects(
     inspectMigrations(database, createMigrationRunner(database, migrations)),

@@ -32,5 +32,6 @@ any retained partial output clearly labeled; do not overwrite existing files.
 
 This plaintext export includes corrected-away information and its original
 sources. It contains memory history, not authentication, access policy, internal
-storage IDs, or idempotency receipts. No import or restore operation is available;
-an export alone does not establish a tested disaster-recovery backup.
+storage IDs, or idempotency receipts. Servers advertising `memoryRestore` can restore it into the same logical Ezer's
+empty memory using separate restore permission; see [restoring memories](restoring-memories.md).
+An export alone does not establish a tested disaster-recovery backup.

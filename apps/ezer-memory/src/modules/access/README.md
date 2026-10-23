@@ -4,7 +4,7 @@
 
 Access determines whether a verified caller may connect to Ezer and which
 logical individual that caller is authorized to use. Its language is callers,
-connection/read/write permissions, assignments, and authorization decisions. It does not define the
+connection/read/write/restore permissions, assignments, and authorization decisions. It does not define the
 individual's personality or store its memories.
 
 ## Responsibilities
@@ -23,7 +23,7 @@ individual's personality or store its memories.
 | ---------- | ------------------------------------------------------------------------------------------------------------ |
 | Credential | Opaque proof submitted by a caller. The application does not parse its format.                               |
 | Caller     | An identity established by the selected verifier. Its `callerId` is distinct from the Ezer individual ID.    |
-| Permission | Access owns `connect`, `read-memory`, and `write-memory`. None implies either of the others.                 |
+| Permission | Access owns `connect`, `read-memory`, `write-memory`, and `restore-memory`. None implies any of the others.  |
 | Assignment | A server-owned mapping from one caller to one individual. Multiple callers may share the same individual.    |
 | Decision   | A granted individual or a bounded denial/unavailability result, independent of HTTP status and OAuth errors. |
 
@@ -42,7 +42,7 @@ exposes these contracts, but is not an allowed cross-context import path:
 
 - `AccessControl.authorize(credential)` returns the authorized logical individual or
   `UNRECOGNIZED_CREDENTIAL`, `UNASSIGNED_CALLER`, `MISSING_PERMISSION`, or `UNAVAILABLE`.
-- `AuthorizedIndividual` carries `callerId`, `individualId` and `readMemory`/`writeMemory`
+- `AuthorizedIndividual` carries `callerId`, `individualId` and `readMemory`/`writeMemory`/`restoreMemory`
   capabilities across the context boundary. No provider claims are exported.
 
 Access HTTP delivery also consumes the inbound authorization contract to identify
@@ -78,10 +78,10 @@ assignments and returns detached policy snapshots. The JWT adapter receives its
 issuer, audience, JWKS URL, and scope mapping through factory settings. Those
 values never pass through `AccessPolicy`, `CredentialVerifier`, or a use-case call.
 The adapter translates verified `sub` and `scope` claims into caller facts and the
-`connect`, `read-memory`, and `write-memory` permissions. Deployment settings map
-these to exact `ezer:connect`, `ezer:memory:read`, and `ezer:memory:write` scope values.
+`connect`, `read-memory`, `write-memory`, and `restore-memory` permissions. Deployment settings map
+these to exact `ezer:connect`, `ezer:memory:read`, `ezer:memory:write`, and `ezer:memory:restore` scope values.
 The application requires connection permission and derives the granted content
-capabilities. Memory's ACL translates them to its own `read`/`write` capabilities;
+capabilities. Memory's ACL translates them to its own `read`/`write`/`restore` capabilities;
 Memory enforces them before each operation. Key retrieval, algorithm selection,
 and caching stay in the JWT adapter.
 
@@ -95,7 +95,7 @@ the JWT adapter and protocol behavior.
 The `cloudflare-access/` adapter validates the browser's opaque proof against the
 configured Access application's public keys, issuer and audience, then maps the
 verified subject into caller facts. An admitted person can consent to connection,
-read and write permissions; narrower client grants are chosen on the consent page.
+read, write, and restore permissions; narrower client grants are chosen on the consent page.
 The adapter does not accept host labels, cookies or raw headers as identity facts.
 
 Access delivery calls the existing `AccessControl.authorize` use case for both
@@ -144,3 +144,14 @@ individual MCP tools. See the [login guide](../../../AUTHORIZATION.md).
 Tests use ephemeral synthetic signing keys, mocked public key/CIMD endpoints, local
 KV, the actual OAuth library and MCP SDK. A live Access deployment, native host
 login and cross-computer continuity still require separate acceptance tests.
+
+## Restore permission
+
+Access independently owns `restore-memory`, translated to `ezer:memory:restore`
+only in JWT/OAuth adapters. `AuthorizedIndividual.restoreMemory` crosses the
+registered ACL as Memory's own `restore` capability. Connection, read, write,
+and restore imply none of the others. Cloudflare Access browser verification
+makes this capability eligible for explicit OAuth consent, whose checkbox is
+unchecked by default. Existing grants do not acquire it. Memory owns archive
+validation and empty-target decisions; Access owns neither restore data nor
+restore transactions.

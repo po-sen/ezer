@@ -14,10 +14,10 @@ export function createMemoryOperations(
   persistence: MemoryPersistence,
 ): MemoryOperations {
   const { individualId } = connection;
-  const { read, write } = connection.capabilities;
+  const { read, write, restore } = connection.capabilities;
   async function perform<T>(
     allowed: boolean,
-    denial: "READ_NOT_GRANTED" | "WRITE_NOT_GRANTED",
+    denial: "READ_NOT_GRANTED" | "WRITE_NOT_GRANTED" | "RESTORE_NOT_GRANTED",
     work: () => Promise<MemoryResult<T>>,
   ): Promise<MemoryResult<T>> {
     if (!allowed) return { ok: false, code: denial };
@@ -32,6 +32,52 @@ export function createMemoryOperations(
     }
   }
   return {
+    restoreHistory(command) {
+      return perform(restore === true, "RESTORE_NOT_GRANTED", async () => {
+        const { page } = command;
+        if (
+          page.individualId !== individualId ||
+          page.revisions.some((r) => r.individualId !== individualId)
+        )
+          return { ok: false, code: "IDENTITY_MISMATCH" };
+        const last = page.revisions.at(-1)?.changeSequence ?? 0;
+        if (
+          page.format !== "ezer-memory" ||
+          page.formatVersion !== 1 ||
+          (page.nextCursor !== null &&
+            (page.nextCursor.snapshotSequence !== page.snapshotSequence ||
+              page.nextCursor.afterSequence !== last))
+        )
+          return { ok: false, code: "INVALID_INPUT" };
+        const result = await persistence.restoreHistory(individualId, {
+          restoreId: command.restoreId,
+          snapshotSequence: page.snapshotSequence,
+          complete: page.nextCursor === null,
+          revisions: page.revisions.map((r) => ({
+            memoryId: r.memoryId,
+            revision: r.revision,
+            body: r.body,
+            source: {
+              reference: r.source.reference,
+              excerpt: r.source.excerpt,
+            },
+            reason: r.reason,
+            recordedAt: r.recordedAt,
+            changeSequence: r.changeSequence,
+          })),
+        });
+        if (!result.ok) return result;
+        return {
+          ok: true,
+          value: {
+            restoreId: result.value.restoreId,
+            snapshotSequence: result.value.snapshotSequence,
+            restoredSequence: result.value.restoredSequence,
+            complete: result.value.complete,
+          },
+        };
+      });
+    },
     exportHistory(query) {
       return perform(read, "READ_NOT_GRANTED", async () => {
         const result = await persistence.exportHistory(individualId, {

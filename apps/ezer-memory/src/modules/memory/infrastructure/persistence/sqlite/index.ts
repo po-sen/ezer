@@ -5,3 +5,4 @@ export { createOperationStore } from "./operation-store.ts";
 export { createRevisionStore } from "./revision-store.ts";
 export type { SqlSession } from "./session.ts";
 export type { SqlValue } from "./sql-value.ts";
+export { createRestoreStore } from "./restore-store.ts";

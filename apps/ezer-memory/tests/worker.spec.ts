@@ -47,6 +47,7 @@ describe("Worker MCP boundary", () => {
       expect(tools.map((tool) => tool.name)).toEqual([
         "ezer_identity",
         "ezer_service_info",
+        "ezer_restore",
         "ezer_remember",
         "ezer_read",
         "ezer_revise",
@@ -68,6 +69,7 @@ describe("Worker MCP boundary", () => {
           memorySearch: true,
           memoryRecent: true,
           memoryExport: true,
+          memoryRestore: true,
         },
       });
     } finally {
@@ -134,6 +136,7 @@ describe("Worker MCP boundary", () => {
       memorySearch: true,
       memoryRecent: true,
       memoryExport: true,
+      memoryRestore: true,
     });
   });
 
@@ -160,7 +163,7 @@ describe("Worker MCP boundary", () => {
           Accept: "application/json, text/event-stream",
           Authorization: `Bearer ${token}`,
         },
-        body: " ".repeat(64 * 1024 + 1),
+        body: " ".repeat(2 * 1024 * 1024 + 1),
       }),
     );
     expect(oversized.status).toBe(413);

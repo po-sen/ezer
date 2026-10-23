@@ -57,6 +57,7 @@ export function createMemoryHttpHandler(
             settings.connectionScope,
             settings.readScope,
             settings.writeScope,
+            settings.restoreScope,
           ],
           bearer_methods_supported: ["header"],
         },

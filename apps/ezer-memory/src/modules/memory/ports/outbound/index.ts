@@ -8,3 +8,4 @@ export type { UnitOfWork } from "./unit-of-work.ts";
 export type { MemoryStateReader } from "./memory-state-reader.ts";
 export type { MemoryAccessGateway } from "./memory-access-gateway.ts";
 export type { MemoryPersistence } from "./memory-persistence.ts";
+export type { RestoreStore } from "./restore-store.ts";

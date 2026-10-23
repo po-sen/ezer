@@ -7,6 +7,7 @@ import {
   createIndividualStateStore,
   createOperationStore,
   createRevisionStore,
+  createRestoreStore,
 } from "../src/modules/memory/infrastructure/persistence/sqlite/index.ts";
 
 import {
@@ -42,6 +43,16 @@ it("exercises SQLite-owned migrations and Stores without the Durable Object adap
         "identity mismatch",
       );
 
+      const restore = createRestoreStore(session);
+      expect(restore.read()).toBeNull();
+      storage.transactionSync(() => restore.start("sqlite-restore", 4));
+      expect(restore.read()).toEqual({
+        restoreId: "sqlite-restore",
+        snapshotSequence: 4,
+        complete: false,
+      });
+      storage.transactionSync(() => restore.complete());
+      expect(restore.read()?.complete).toBe(true);
       const state = createIndividualStateStore(session);
       const revisions = createRevisionStore(session);
       const operations = createOperationStore(session);

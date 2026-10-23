@@ -14,6 +14,9 @@ export function createInspectMemory(unitOfWork: UnitOfWork): InspectMemory {
         )
           return { ok: false, code: "INVALID_INPUT" };
         return unitOfWork.within((stores) => {
+          const restoring = stores.restore.read();
+          if (restoring && !restoring.complete)
+            return { ok: false, code: "RESTORE_IN_PROGRESS" } as const;
           const state = stores.state.read();
           const revision = stores.revisions.find(
             lookup.memoryId,

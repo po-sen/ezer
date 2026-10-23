@@ -26,6 +26,7 @@ export async function createOAuthFixture() {
     "ezer:connect",
     "ezer:memory:read",
     "ezer:memory:write",
+    "ezer:memory:restore",
     "offline_access",
   ];
   const keys = {
@@ -134,7 +135,9 @@ export async function createOAuthFixture() {
       redirect_uri: client.redirect_uris[0]!,
       response_type: "code",
       resource: policy.resource,
-      scope: (options.scope ?? scopes).join(" "),
+      scope: (
+        options.scope ?? scopes.filter((s) => s !== "ezer:memory:restore")
+      ).join(" "),
       state: crypto.randomUUID(),
       code_challenge: challenge,
       code_challenge_method: "S256",
@@ -154,7 +157,9 @@ export async function createOAuthFixture() {
       individual: field("individual"),
       decision: "approve",
     });
-    for (const scope of options.scope ?? scopes) form.append("scope", scope);
+    for (const scope of options.scope ??
+      scopes.filter((s) => s !== "ezer:memory:restore"))
+      form.append("scope", scope);
     const headers = {
       "Cf-Access-Jwt-Assertion": assertion,
       Cookie: response.headers.get("Set-Cookie")?.split(";")[0] ?? "",

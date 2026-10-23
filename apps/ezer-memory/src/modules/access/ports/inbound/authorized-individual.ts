@@ -4,5 +4,6 @@ export interface AuthorizedIndividual {
   readonly capabilities: {
     readonly readMemory: boolean;
     readonly writeMemory: boolean;
+    readonly restoreMemory: boolean;
   };
 }

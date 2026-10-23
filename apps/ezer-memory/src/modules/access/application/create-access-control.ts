@@ -39,6 +39,7 @@ export function createAccessControl(
             capabilities: {
               readMemory: caller.permissions.includes("read-memory"),
               writeMemory: caller.permissions.includes("write-memory"),
+              restoreMemory: caller.permissions.includes("restore-memory"),
             },
           },
         };

@@ -405,7 +405,7 @@ function responsibilityViolations(file: string, text: string): string[] {
     if (
       inner &&
       ts.isIdentifier(node) &&
-      /^(jwksUri|issuer|audience|scopes?|authorizationServer|connectionScope|readScope|writeScope|JWT|JOSE|JWKS)$/i.test(
+      /^(jwksUri|issuer|audience|scopes?|authorizationServer|connectionScope|readScope|writeScope|restoreScope|JWT|JOSE|JWKS)$/i.test(
         node.text,
       )
     )
@@ -534,6 +534,7 @@ test("context contracts reject provider settings and protocol vocabulary", () =>
     [
       "modules/access/ports/outbound/verifier.ts",
       "interface Settings { writeScope: string }",
+      "interface Settings { restoreScope: string }",
     ],
     [
       "modules/access/application/access.ts",

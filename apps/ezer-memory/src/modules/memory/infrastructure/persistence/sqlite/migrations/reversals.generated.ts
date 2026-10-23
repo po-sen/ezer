@@ -3,5 +3,9 @@ export const reversals = [
   {
     "idMonotonicInc": 1,
     "sql": "-- Destructive baseline reversal. Recovery requires a separately verified backup.\n-- Never executed by the Worker or an RPC endpoint.\nDROP TABLE operations;\nDROP TABLE revisions;\nDROP TABLE state;\n"
+  },
+  {
+    "idMonotonicInc": 2,
+    "sql": "-- Only reverse after separately verifying that no restore is pending.\nDROP TABLE restore;\n"
   }
 ] as const;

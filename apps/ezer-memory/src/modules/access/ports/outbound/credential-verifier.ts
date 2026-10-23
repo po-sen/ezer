@@ -5,7 +5,7 @@ export interface CredentialVerifier {
         readonly callerId: string;
         readonly restrictedIndividualId?: string;
         readonly permissions: readonly (
-          "connect" | "read-memory" | "write-memory"
+          "connect" | "read-memory" | "write-memory" | "restore-memory"
         )[];
       }
     | { readonly status: "unrecognized" }

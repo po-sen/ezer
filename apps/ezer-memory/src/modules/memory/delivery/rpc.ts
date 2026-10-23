@@ -6,8 +6,22 @@ import type {
   ListMemories,
   SearchMemories,
   ExportMemoryHistory,
+  RestoreMemoryHistory,
 } from "../ports/inbound/index.ts";
 
+import { memoryExportPageSchema } from "./memory-export-page-schema.ts";
+const restoreCommand = z.strictObject({
+  restoreId: z.string().max(128),
+  snapshotSequence: memoryExportPageSchema.shape.snapshotSequence,
+  complete: z.boolean(),
+  revisions: z
+    .array(
+      memoryExportPageSchema.shape.revisions.element.omit({
+        individualId: true,
+      }),
+    )
+    .max(10),
+});
 const content = {
   operationId: z.string(),
   memoryId: z.string(),
@@ -62,8 +76,18 @@ export function createMemoryRpcHandler(
   list: ListMemories,
   search: SearchMemories,
   exportHistory: ExportMemoryHistory,
+  restoreHistory: RestoreMemoryHistory,
 ) {
   return {
+    restoreHistory(input: unknown) {
+      const parsed = restoreCommand.safeParse(input);
+      if (!parsed.success) return { ok: false, code: "INVALID_INPUT" } as const;
+      try {
+        return restoreHistory.execute(parsed.data);
+      } catch {
+        return { ok: false, code: "INTERNAL_ERROR" } as const;
+      }
+    },
     exportHistory(input: unknown) {
       const parsed = exportQuery.safeParse(input);
       if (!parsed.success) return { ok: false, code: "INVALID_INPUT" } as const;

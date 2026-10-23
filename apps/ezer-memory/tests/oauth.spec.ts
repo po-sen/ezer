@@ -31,6 +31,43 @@ async function connect(
 }
 
 describe("Cloudflare Access and OAuth authorization", () => {
+  it("requires explicit restore consent and keeps ordinary read/write grants insufficient", async () => {
+    const h = await createOAuthFixture();
+    const login = await h.begin({
+      scope: ["ezer:connect", "ezer:memory:restore"],
+    });
+    expect(login.html).toContain('value="ezer:memory:restore">');
+    expect(login.html).not.toContain('value="ezer:memory:restore" checked');
+    const command = {
+      name: "ezer_restore",
+      arguments: {
+        restoreId: "empty",
+        page: {
+          format: "ezer-memory",
+          formatVersion: 1,
+          individualId: h.policy.bindings[0]!.individualId,
+          snapshotSequence: 0,
+          revisions: [],
+          nextCursor: null,
+        },
+      },
+    };
+    const ordinary = await h.grant();
+    const writer = await connect(h, ordinary.tokens.access_token);
+    expect((await writer.callTool(command)).content).toEqual([
+      { type: "text", text: "RESTORE_NOT_GRANTED" },
+    ]);
+    const allowed = await h.grant({
+      scope: ["ezer:connect", "ezer:memory:restore"],
+    });
+    const restorer = await connect(h, allowed.tokens.access_token);
+    expect((await restorer.callTool(command)).structuredContent).toMatchObject({
+      complete: true,
+    });
+    expect(
+      (await restorer.callTool({ name: "ezer_export", arguments: {} })).content,
+    ).toEqual([{ type: "text", text: "READ_NOT_GRANTED" }]);
+  });
   it("advertises a complete login flow without requiring an Access browser session for protocol endpoints", async () => {
     const h = await createOAuthFixture();
     const denied = await h.request("/mcp");

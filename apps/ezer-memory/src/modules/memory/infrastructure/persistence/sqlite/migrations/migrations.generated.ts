@@ -4,5 +4,10 @@ export const migrations = [
     "idMonotonicInc": 1,
     "description": "memory_initial",
     "sql": "CREATE TABLE state (\n  singleton INTEGER PRIMARY KEY CHECK (singleton = 1),\n  individual_id TEXT NOT NULL,\n  change_sequence INTEGER NOT NULL CHECK (change_sequence >= 0 AND change_sequence <= 9007199254740991)\n);\nCREATE TABLE revisions (\n  memory_id TEXT NOT NULL,\n  revision INTEGER NOT NULL CHECK (revision > 0 AND revision <= 9007199254740991),\n  body TEXT NOT NULL,\n  source_reference TEXT NOT NULL,\n  source_excerpt TEXT NOT NULL,\n  reason TEXT,\n  recorded_at TEXT NOT NULL,\n  change_sequence INTEGER NOT NULL UNIQUE CHECK (change_sequence > 0 AND change_sequence <= 9007199254740991),\n  PRIMARY KEY (memory_id, revision),\n  CHECK ((revision = 1 AND reason IS NULL) OR (revision > 1 AND reason IS NOT NULL))\n);\nCREATE TABLE operations (\n  operation_id TEXT PRIMARY KEY NOT NULL,\n  fingerprint TEXT NOT NULL,\n  memory_id TEXT NOT NULL,\n  revision INTEGER NOT NULL,\n  FOREIGN KEY (memory_id, revision) REFERENCES revisions(memory_id, revision)\n);\n"
+  },
+  {
+    "idMonotonicInc": 2,
+    "description": "restore",
+    "sql": "CREATE TABLE restore (\n  singleton INTEGER PRIMARY KEY CHECK (singleton = 1),\n  restore_id TEXT NOT NULL,\n  snapshot_sequence INTEGER NOT NULL CHECK (snapshot_sequence >= 0 AND snapshot_sequence <= 9007199254740991),\n  complete INTEGER NOT NULL CHECK (complete IN (0, 1))\n);\n"
   }
 ] as const;

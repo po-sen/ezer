@@ -48,7 +48,12 @@ export function createAccessSessionVerifierFactory() {
         return {
           status: "verified",
           callerId: payload.sub,
-          permissions: ["connect", "read-memory", "write-memory"],
+          permissions: [
+            "connect",
+            "read-memory",
+            "write-memory",
+            "restore-memory",
+          ],
         };
       } catch (error) {
         if (

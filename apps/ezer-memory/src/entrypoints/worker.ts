@@ -26,6 +26,10 @@ export class EzerMemory extends DurableObject<Env> {
     return this.#memory.search(input);
   }
 
+  restoreHistory(input: unknown) {
+    return this.#memory.restoreHistory(input);
+  }
+
   exportHistory(input: unknown) {
     return this.#memory.exportHistory(input);
   }

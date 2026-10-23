@@ -7,6 +7,25 @@ export function createMemoryPersistence(
   namespace: Env["EZER_MEMORY"],
 ): MemoryPersistence {
   return {
+    async restoreHistory(individualId, command) {
+      try {
+        const result = await namespace
+          .getByName(`ezer:v1:${individualId}`)
+          .restoreHistory(command);
+        if (!result.ok) return result;
+        return {
+          ok: true,
+          value: {
+            restoreId: result.value.restoreId,
+            snapshotSequence: result.value.snapshotSequence,
+            restoredSequence: result.value.restoredSequence,
+            complete: result.value.complete,
+          },
+        };
+      } catch {
+        throw new PersistenceFault();
+      }
+    },
     async exportHistory(individualId, query) {
       try {
         const result = await namespace
