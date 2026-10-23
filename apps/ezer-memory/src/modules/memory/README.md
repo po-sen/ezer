@@ -13,6 +13,7 @@ including traceable corrections and ordered changes within that individual.
 - Maintain the individual's change sequence and operation receipts so writes are
   ordered and completed retries return the original result.
 - List and search bounded previews at a stable revision snapshot and enforce content grants.
+- Export complete immutable revision history in bounded pages at a fixed snapshot.
 - Read a record's latest or requested revision and expose detached views through
   inbound contracts.
 - Own memory storage isolation, transaction boundaries, and adapter-specific
@@ -117,6 +118,22 @@ external model, or dependency. This initial implementation scans bodies; page
 limits bound returned data, not total scan cost. Measure large-history latency and
 storage reads before adding a context-owned index. It does not provide relevance
 ranking, tokenization, Unicode case folding, normalization, or semantic retrieval.
+
+`ExportMemoryHistory` returns every revision at its first page's snapshot,
+including superseded bodies and sources, in increasing change-sequence order.
+It reads state and history in one Unit of Work; subsequent pages use the same
+upper bound. Its page limit counts revisions (default 5, maximum 10), and the
+full fields are detached rather than previewed. Each persistence adapter owns
+its history query, using the existing change-sequence index without a migration.
+`MemoryOperations.exportHistory` enforces read permission before persistence and
+maps internal storage identity to the authorized logical identity. MCP exposes
+this as `ezer_export`, advertised by `memoryExport`.
+
+The Memory-owned export contract has format `ezer-memory`, version 1, the logical
+individual ID, snapshot sequence, complete revisions, and a continuation cursor.
+It excludes Access data, native storage IDs, and retry-operation records. Export
+does not implement import, restore, deletion, or identity/epoch migration; a
+complete content archive is not a tested database recovery mechanism.
 
 ## Outside this context
 

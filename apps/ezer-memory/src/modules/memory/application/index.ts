@@ -7,3 +7,4 @@ export { createDescribeMemoryBinding } from "./describe-memory-binding.ts";
 export { createListMemories } from "./list-memories.ts";
 export { createSearchMemories } from "./search-memories.ts";
 export { createMemoryOperations } from "./create-memory-operations.ts";
+export { createExportMemoryHistory } from "./export-memory-history.ts";

@@ -6,6 +6,7 @@ import {
 } from "@modelcontextprotocol/client";
 import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { createTestAuthority } from "./authorization/index.ts";
+import type { MemoryExportPage } from "../src/modules/memory/ports/inbound/index.ts";
 
 afterEach(() => vi.restoreAllMocks());
 const all = "ezer:connect ezer:memory:read ezer:memory:write";
@@ -78,6 +79,252 @@ async function harness() {
 }
 
 describe("scoped memory MCP operations", () => {
+  it("exports complete revision history at one snapshot across writes and object eviction", async () => {
+    const h = await harness();
+    const writer = await h.client();
+    const reader = await h.client("ezer:connect ezer:memory:read");
+    const firstInput = {
+      ...memory("a"),
+      body: "Original ".repeat(100),
+      source: {
+        reference: "test:original",
+        excerpt: "Original source\nwith a second line",
+      },
+    };
+    const firstReceipt = value(
+      await writer.callTool({ name: "ezer_remember", arguments: firstInput }),
+    );
+    const secondInput = memory("b");
+    const secondReceipt = value(
+      await writer.callTool({ name: "ezer_remember", arguments: secondInput }),
+    );
+    const correction = {
+      ...memory("a", "correct-a"),
+      expectedRevision: 1,
+      body: "Corrected a",
+      source: { reference: "test:correction", excerpt: "New evidence" },
+      reason: "Preference changed",
+    };
+    const correctionReceipt = value(
+      await writer.callTool({ name: "ezer_revise", arguments: correction }),
+    );
+    const expected = [
+      {
+        ...firstReceipt,
+        body: firstInput.body,
+        source: firstInput.source,
+        reason: null,
+      },
+      {
+        ...secondReceipt,
+        body: secondInput.body,
+        source: secondInput.source,
+        reason: null,
+      },
+      {
+        ...correctionReceipt,
+        body: correction.body,
+        source: correction.source,
+        reason: correction.reason,
+      },
+    ];
+    const first = value(
+      await reader.callTool({ name: "ezer_export", arguments: { limit: 1 } }),
+    ) as unknown as MemoryExportPage;
+    expect(first).toEqual({
+      format: "ezer-memory",
+      formatVersion: 1,
+      individualId: h.alice,
+      snapshotSequence: 3,
+      revisions: [expected[0]],
+      nextCursor: { snapshotSequence: 3, afterSequence: 1 },
+    });
+    const later = await Promise.all([
+      writer.callTool({
+        name: "ezer_revise",
+        arguments: {
+          ...correction,
+          operationId: "later-a",
+          expectedRevision: 2,
+          body: "Later a",
+        },
+      }),
+      writer.callTool({ name: "ezer_remember", arguments: memory("c") }),
+    ]);
+    later.forEach(value);
+    await evictDurableObject(env.EZER_MEMORY.getByName(`ezer:v1:${h.alice}`));
+    const continuation = { limit: 2, cursor: first.nextCursor! };
+    const second = value(
+      await reader.callTool({ name: "ezer_export", arguments: continuation }),
+    ) as unknown as MemoryExportPage;
+    expect(second).toEqual({
+      ...first,
+      revisions: expected.slice(1),
+      nextCursor: null,
+    });
+    expect([...first.revisions, ...second.revisions]).toEqual(expected);
+    expect(
+      value(
+        await reader.callTool({ name: "ezer_export", arguments: continuation }),
+      ),
+    ).toEqual(second);
+    const fresh = value(
+      await reader.callTool({ name: "ezer_export", arguments: {} }),
+    ) as unknown as MemoryExportPage;
+    expect(fresh.snapshotSequence).toBe(5);
+    expect(fresh.revisions).toHaveLength(5);
+    expect(fresh.revisions.map((revision) => revision.changeSequence)).toEqual([
+      1, 2, 3, 4, 5,
+    ]);
+    expect(fresh.revisions.slice(0, 3)).toEqual(expected);
+    expect(fresh.revisions.slice(3).map((revision) => revision.body)).toEqual(
+      expect.arrayContaining(["Later a", memory("c").body]),
+    );
+    expect(fresh.nextCursor).toBeNull();
+    expect(JSON.stringify(fresh)).not.toContain(
+      env.EZER_MEMORY.idFromName(`ezer:v1:${h.alice}`).toString(),
+    );
+    expect(JSON.stringify(fresh)).not.toContain("operationId");
+    expect(JSON.stringify(fresh)).not.toContain("fingerprint");
+    expect(
+      value(await reader.callTool({ name: "ezer_identity", arguments: {} }))
+        .changeSequence,
+    ).toBe(5);
+  });
+
+  it("keeps export cursors subordinate to the authenticated individual", async () => {
+    const h = await harness();
+    const alice = await h.client();
+    const bob = await h.client(all, "bob");
+    expect(
+      value(await bob.callTool({ name: "ezer_export", arguments: {} })),
+    ).toEqual({
+      format: "ezer-memory",
+      formatVersion: 1,
+      individualId: h.bob,
+      snapshotSequence: 0,
+      revisions: [],
+      nextCursor: null,
+    });
+    for (const [client, label] of [
+      [alice, "Alice"],
+      [bob, "Bob"],
+    ] as const) {
+      for (const id of ["a", "b"])
+        value(
+          await client.callTool({
+            name: "ezer_remember",
+            arguments: { ...memory(id), body: `${label} only ${id}` },
+          }),
+        );
+    }
+    const first = value(
+      await alice.callTool({ name: "ezer_export", arguments: { limit: 1 } }),
+    ) as unknown as MemoryExportPage;
+    const other = value(
+      await bob.callTool({
+        name: "ezer_export",
+        arguments: { cursor: first.nextCursor! },
+      }),
+    ) as unknown as MemoryExportPage;
+    expect(other.individualId).toBe(h.bob);
+    expect(other.revisions.map((revision) => revision.body)).toEqual([
+      "Bob only b",
+    ]);
+    expect(
+      other.revisions.every((revision) => revision.individualId === h.bob),
+    ).toBe(true);
+    expect(JSON.stringify(other)).not.toContain("Alice");
+  });
+
+  it("bounds export pages without truncating revision content and rejects invalid requests", async () => {
+    const h = await harness();
+    const client = await h.client();
+    const full = {
+      ...memory("full"),
+      body: "x".repeat(16_384),
+      source: { reference: "r".repeat(1_024), excerpt: "e".repeat(4_096) },
+    };
+    value(await client.callTool({ name: "ezer_remember", arguments: full }));
+    for (let i = 1; i < 12; i++)
+      value(
+        await client.callTool({
+          name: "ezer_remember",
+          arguments: memory(`record-${i}`),
+        }),
+      );
+    const defaultPage = value(
+      await client.callTool({ name: "ezer_export", arguments: {} }),
+    ) as unknown as MemoryExportPage;
+    expect(defaultPage.revisions).toHaveLength(5);
+    expect(defaultPage.revisions[0]).toMatchObject({
+      body: full.body,
+      source: full.source,
+    });
+    const maximum = value(
+      await client.callTool({ name: "ezer_export", arguments: { limit: 10 } }),
+    ) as unknown as MemoryExportPage;
+    expect(maximum.revisions).toHaveLength(10);
+    const last = value(
+      await client.callTool({
+        name: "ezer_export",
+        arguments: { limit: 10, cursor: maximum.nextCursor! },
+      }),
+    ) as unknown as MemoryExportPage;
+    expect(last.revisions.map((revision) => revision.changeSequence)).toEqual([
+      11, 12,
+    ]);
+    expect(last.nextCursor).toBeNull();
+    expect(
+      value(
+        await client.callTool({
+          name: "ezer_export",
+          arguments: { cursor: { snapshotSequence: 0, afterSequence: 0 } },
+        }),
+      ).revisions,
+    ).toEqual([]);
+    expect(
+      value(
+        await client.callTool({
+          name: "ezer_export",
+          arguments: { cursor: { snapshotSequence: 12, afterSequence: 12 } },
+        }),
+      ).revisions,
+    ).toEqual([]);
+    for (const input of [
+      { limit: 0 },
+      { limit: 11 },
+      { limit: 1.5 },
+      { limit: "1" },
+      { individualId: h.bob },
+      { cursor: null },
+      { formatVersion: 2 },
+      { cursor: { snapshotSequence: -1, afterSequence: 0 } },
+      { cursor: { snapshotSequence: 1, afterSequence: 2 } },
+      { cursor: { snapshotSequence: 12, afterSequence: 0.5 } },
+      { cursor: { snapshotSequence: 13, afterSequence: 0 } },
+      {
+        cursor: {
+          snapshotSequence: Number.MAX_SAFE_INTEGER + 1,
+          afterSequence: 0,
+        },
+      },
+      {
+        cursor: { snapshotSequence: 12, afterSequence: 0, individualId: h.bob },
+      },
+    ]) {
+      expect(
+        (await client.callTool({ name: "ezer_export", arguments: input }))
+          .isError,
+      ).toBe(true);
+      expect(
+        await env.EZER_MEMORY.getByName(`ezer:v1:${h.alice}`).exportHistory(
+          input,
+        ),
+      ).toEqual({ ok: false, code: "INVALID_INPUT" });
+    }
+  });
+
   it("recovers the newest changes first while preserving snapshots and legacy cursors", async () => {
     const h = await harness();
     const writer = await h.client();
@@ -601,6 +848,10 @@ describe("scoped memory MCP operations", () => {
         "READ_NOT_GRANTED",
       );
       failure(
+        await client.callTool({ name: "ezer_export", arguments: {} }),
+        "READ_NOT_GRANTED",
+      );
+      failure(
         await client.callTool({
           name: "ezer_list",
           arguments: { order: "newest" },
@@ -642,6 +893,10 @@ describe("scoped memory MCP operations", () => {
     );
     failure(
       await writer.callTool({ name: "ezer_list", arguments: {} }),
+      "READ_NOT_GRANTED",
+    );
+    failure(
+      await writer.callTool({ name: "ezer_export", arguments: {} }),
       "READ_NOT_GRANTED",
     );
     failure(

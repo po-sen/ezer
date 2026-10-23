@@ -13,6 +13,7 @@ export function createDescribeMemoryService(
         memoryWrite: true,
         memorySearch: true,
         memoryRecent: true,
+        memoryExport: true,
       },
     }),
   };

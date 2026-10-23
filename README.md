@@ -141,12 +141,15 @@ revisions, atomic writes, and idempotent retries in isolated Durable Objects.
 Local tests cover concurrent corrections, rollback, recovery after object
 eviction, token validation, and authorized routing to isolated memory objects.
 MCP identity lookup reads only the bound object's change sequence. `ezer_remember`,
-`ezer_read`, `ezer_revise`, `ezer_list`, and `ezer_search` expose scoped memory operations. Connection
+`ezer_read`, `ezer_revise`, `ezer_list`, `ezer_search`, and `ezer_export` expose scoped memory operations. Connection
 permission alone cannot read or write contents; all tools route through the same
 authorized identity. Pagination lists bounded previews at a stable sequence, and
 reading a listed revision retrieves its complete content and source. Literal body
 search lets the agent retrieve matching memories without paging through every
 preview; it preserves the same authorization and snapshot boundaries.
+On request, the plugin can export complete revision history as versioned JSON
+pages, including original sources and superseded content. Export uses a fixed
+snapshot and read permission; import and restore remain future work.
 
 ```sh
 pnpm --filter @ezer/memory dev

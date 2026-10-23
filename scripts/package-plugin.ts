@@ -88,6 +88,7 @@ function packagePlugin(): void {
     .replace(/^name: ezer$/m, `name: ${name}`)
     .replace(/^description: /m, `description: For ${name}. `);
   const writing = readSource("skills/ezer/references/writing-memories.md");
+  const exporting = readSource("skills/ezer/references/exporting-memories.md");
   const presentation = {
     ...manifest.extensions["com.openai"].interface,
     displayName: name,
@@ -150,6 +151,7 @@ function packagePlugin(): void {
   });
   files[`${skillRoot}/SKILL.md`] = skill;
   files[`${skillRoot}/references/writing-memories.md`] = writing;
+  files[`${skillRoot}/references/exporting-memories.md`] = exporting;
   files[`${skillRoot}/references/connection.md`] =
     `# Instance connection\n\nInstallation and MCP server key: \`${name}\`.\n\n` +
     `Resource URL: \`${endpoint.href}\`.\n\n` +

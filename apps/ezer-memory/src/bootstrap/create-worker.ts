@@ -8,6 +8,7 @@ import {
   createListMemories,
   createSearchMemories,
   createMemoryOperations,
+  createExportMemoryHistory,
 } from "../modules/memory/application/index.ts";
 
 import {
@@ -106,6 +107,7 @@ export function createMemory(
       createInspectMemoryState(unitOfWork),
       createListMemories(unitOfWork),
       createSearchMemories(unitOfWork),
+      createExportMemoryHistory(unitOfWork),
     ),
   };
 }

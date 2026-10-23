@@ -3,6 +3,7 @@ import {
   createListMemories,
   createSearchMemories,
   createMemoryOperations,
+  createExportMemoryHistory,
 } from "../src/modules/memory/application/index.ts";
 import {
   PersistenceFault,
@@ -18,6 +19,10 @@ const command = {
 };
 function persistence() {
   return {
+    exportHistory: vi.fn<MemoryPersistence["exportHistory"]>(async () => ({
+      ok: false,
+      code: "NOT_FOUND",
+    })),
     commit: vi.fn<MemoryPersistence["commit"]>(async () => ({
       ok: false,
       code: "NOT_FOUND",
@@ -53,6 +58,10 @@ describe("Memory-owned operation grants", () => {
       code: "READ_NOT_GRANTED",
     });
     expect(await operations.list({})).toEqual({
+      ok: false,
+      code: "READ_NOT_GRANTED",
+    });
+    expect(await operations.exportHistory({})).toEqual({
       ok: false,
       code: "READ_NOT_GRANTED",
     });
@@ -149,8 +158,94 @@ describe("Memory-owned operation grants", () => {
       await operations.inspect({ memoryId: "memory" }),
       await operations.list({}),
       await operations.search({ query: "Synthetic" }),
+      await operations.exportHistory({}),
     ])
       expect(result).toEqual({ ok: false, code: "UNAVAILABLE" });
+  });
+});
+
+describe("Memory export invariants", () => {
+  it("validates page bounds before reading storage and maps persistence failures", () => {
+    const within = vi.fn(() => {
+      throw new PersistenceFault();
+    });
+    const exporter = createExportMemoryHistory({ within });
+    for (const query of [
+      { limit: 0 },
+      { limit: 11 },
+      { limit: NaN },
+      { limit: Infinity },
+      { limit: 1.5 },
+      { cursor: { snapshotSequence: -1, afterSequence: 0 } },
+      { cursor: { snapshotSequence: NaN, afterSequence: 0 } },
+      { cursor: { snapshotSequence: 2, afterSequence: Infinity } },
+      { cursor: { snapshotSequence: 2, afterSequence: 3 } },
+      { cursor: { snapshotSequence: 2, afterSequence: 0.5 } },
+    ])
+      expect(exporter.execute(query)).toEqual({
+        ok: false,
+        code: "INVALID_INPUT",
+      });
+    expect(within).not.toHaveBeenCalled();
+    expect(exporter.execute({})).toEqual({ ok: false, code: "UNAVAILABLE" });
+  });
+
+  it("detaches export requests and full history while excluding storage-only fields", async () => {
+    const gateway = persistence();
+    const cursor = { snapshotSequence: 3, afterSequence: 1 };
+    const revision = {
+      individualId: "native-owner",
+      memoryId: "memory",
+      revision: 2,
+      recordedAt: "2026-10-23T00:00:00Z",
+      changeSequence: 2,
+      body: "Corrected",
+      source: { reference: "test:source", excerpt: "New evidence" },
+      reason: "Correction",
+      operationId: "private-operation",
+    };
+    const stored = {
+      individualId: "native-owner",
+      snapshotSequence: 3,
+      revisions: [revision],
+      nextCursor: { ...cursor, afterSequence: 2 },
+    };
+    gateway.exportHistory.mockImplementation(async (individualId, input) => {
+      expect(individualId).toBe("alice");
+      expect(input).toEqual({ limit: 1, cursor });
+      expect(input.cursor).not.toBe(cursor);
+      return { ok: true, value: stored };
+    });
+    const operations = createMemoryOperations(
+      { individualId: "alice", capabilities: { read: true, write: false } },
+      gateway,
+    );
+    const result = await operations.exportHistory({ limit: 1, cursor });
+    revision.body = "Changed";
+    revision.source.excerpt = "Changed";
+    stored.nextCursor.afterSequence = 3;
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        format: "ezer-memory",
+        formatVersion: 1,
+        individualId: "alice",
+        snapshotSequence: 3,
+        revisions: [
+          {
+            individualId: "alice",
+            memoryId: "memory",
+            revision: 2,
+            recordedAt: "2026-10-23T00:00:00Z",
+            changeSequence: 2,
+            body: "Corrected",
+            source: { reference: "test:source", excerpt: "New evidence" },
+            reason: "Correction",
+          },
+        ],
+        nextCursor: { snapshotSequence: 3, afterSequence: 2 },
+      },
+    });
   });
 });
 

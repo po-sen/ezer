@@ -5,7 +5,7 @@
 Ezer is an early-stage plugin project using Agent Skills and MCP. The planned
 memory service uses TypeScript on Cloudflare Workers. Its authenticated MCP endpoint
 exposes service information, authorized Ezer identity metadata, and scoped memory
-creation, reading, correction, listing, and literal body search. A SQLite-backed Durable Object implements
+creation, reading, correction, listing, literal body search, and complete revision-history export. A SQLite-backed Durable Object implements
 memory persistence. Hosted OAuth uses the official Cloudflare library and a
 self-hosted Access application; cloud-resource and Access-policy provisioning
 remain operator responsibilities.
@@ -71,6 +71,10 @@ must use the connection's server-authorized logical identity and separate read/w
 grants. Never accept a client-selected individual or native storage ID. Memory's
 application enforces these grants before calling its persistence port; HTTP delivery
 reauthorizes every request, and connection permission alone grants no content access.
+Export uses the same read grant and authorized identity. Its versioned format
+contains full immutable revisions at a fixed change-sequence snapshot, never
+authorization data, native storage IDs, or operation receipts. Keep export pages
+bounded and preserve earlier revisions; import and restore are not implemented.
 Worker declarations are generated with `wrangler types`; commit the output after
 configuration, export, or Wrangler changes. Never hand-edit or format
 `apps/ezer-memory/worker-configuration.d.ts`. The full check rejects stale types

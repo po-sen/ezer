@@ -18,3 +18,6 @@ export type { MemoryOperations } from "./memory-operations.ts";
 export type { MemorySearchQuery } from "./memory-search-query.ts";
 export type { MemorySearchPage } from "./memory-search-page.ts";
 export type { SearchMemories } from "./search-memories.ts";
+export type { ExportMemoryHistory } from "./export-memory-history.ts";
+export type { MemoryExportQuery } from "./memory-export-query.ts";
+export type { MemoryExportPage } from "./memory-export-page.ts";

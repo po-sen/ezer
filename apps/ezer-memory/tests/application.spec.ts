@@ -6,6 +6,7 @@ import {
   createDescribeMemoryBinding,
   createListMemories,
   createSearchMemories,
+  createExportMemoryHistory,
 } from "../src/modules/memory/application/index.ts";
 
 import { createMemoryRpcHandler } from "../src/modules/memory/delivery/index.ts";
@@ -39,6 +40,7 @@ function harness() {
       },
     },
     revisions: {
+      history: () => [],
       list: () => [],
       search: () => [],
       find: () => {
@@ -185,6 +187,7 @@ describe("memory application orchestration", () => {
       },
       createListMemories(broken),
       createSearchMemories(broken),
+      createExportMemoryHistory(broken),
     );
     expect(await rpc.commit(command())).toEqual({
       ok: false,
@@ -195,6 +198,10 @@ describe("memory application orchestration", () => {
       code: "INTERNAL_ERROR",
     });
     expect(rpc.inspectState()).toEqual({ ok: false, code: "INTERNAL_ERROR" });
+    expect(rpc.exportHistory({})).toEqual({
+      ok: false,
+      code: "INTERNAL_ERROR",
+    });
     expect(rpc.search({ query: "example" })).toEqual({
       ok: false,
       code: "INTERNAL_ERROR",

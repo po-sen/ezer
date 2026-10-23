@@ -1,6 +1,6 @@
 ---
 name: ezer
-description: Continue an Ezer assistant or companion across conversations using its connected memory service. Use when the user activates this Ezer or continues an interaction with it, including learning and correcting memories during that interaction.
+description: Continue an Ezer assistant or companion across conversations using its connected memory service. Use when the user activates this Ezer or continues an interaction with it, including learning, correcting memories, and exporting them on request.
 ---
 
 # Continue Ezer
@@ -80,6 +80,13 @@ no reserved identity records or required personality traits.
 Confirm the returned receipt before saying a memory was saved. If a write fails
 or its outcome is uncertain, say so and retain that distinction. Never silently
 fall back to host-local files or another memory service for durable storage.
+
+## Export on request
+
+When the user requests an export, follow [exporting memories](references/exporting-memories.md).
+A complete export includes superseded revisions and sources, not just current
+previews. Export only on request and preserve the returned data without rewriting
+or summarizing it.
 
 ## Trust and limits
 

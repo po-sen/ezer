@@ -3,6 +3,10 @@ import { X509Certificate } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { createAcceptanceFixture } from "./acceptance/index.ts";
+import type {
+  MemoryExportPage,
+  MemoryInspection,
+} from "../src/modules/memory/ports/inbound/index.ts";
 
 test(
   "packaged HTTPS connections preserve memories across sessions and runtime restarts",
@@ -96,7 +100,55 @@ test(
       ).body,
       "Synthetic preference: amber tea.",
     );
+    const exported = await third.callTool({
+      name: "ezer_export",
+      arguments: { limit: 1 },
+    });
+    assert.ok(!exported.isError);
+    const exportPage =
+      exported.structuredContent as unknown as MemoryExportPage;
+    assert.deepEqual(exportPage, {
+      format: "ezer-memory",
+      formatVersion: 1,
+      individualId: "acceptance-alpha",
+      snapshotSequence: 2,
+      revisions: [
+        (history.structuredContent as unknown as MemoryInspection).memory,
+      ],
+      nextCursor: { snapshotSequence: 2, afterSequence: 1 },
+    });
+    const text = exported.content[0];
+    assert.ok(text?.type === "text");
+    assert.deepEqual(JSON.parse(text.text), exportPage);
+    await third.close();
+    await fixture.restart();
+    const resumed = await fixture.client("alpha");
+    const remainder = await resumed.callTool({
+      name: "ezer_export",
+      arguments: { cursor: exportPage.nextCursor! },
+    });
+    assert.ok(!remainder.isError);
+    assert.deepEqual(remainder.structuredContent, {
+      ...exportPage,
+      revisions: [
+        (corrected.structuredContent as unknown as MemoryInspection).memory,
+      ],
+      nextCursor: null,
+    });
     const other = await fixture.client("beta");
+    const otherExport = await other.callTool({
+      name: "ezer_export",
+      arguments: {},
+    });
+    assert.ok(!otherExport.isError);
+    assert.deepEqual(otherExport.structuredContent, {
+      format: "ezer-memory",
+      formatVersion: 1,
+      individualId: "acceptance-beta",
+      snapshotSequence: 0,
+      revisions: [],
+      nextCursor: null,
+    });
     assert.deepEqual(
       (
         await other.callTool({
@@ -127,6 +179,14 @@ test(
     });
     assert.equal(denial.isError, true);
     assert.deepEqual(denial.content, [
+      { type: "text", text: "READ_NOT_GRANTED" },
+    ]);
+    const exportDenial = await denied.callTool({
+      name: "ezer_export",
+      arguments: {},
+    });
+    assert.equal(exportDenial.isError, true);
+    assert.deepEqual(exportDenial.content, [
       { type: "text", text: "READ_NOT_GRANTED" },
     ]);
   },

@@ -32,6 +32,48 @@ export function createMemoryOperations(
     }
   }
   return {
+    exportHistory(query) {
+      return perform(read, "READ_NOT_GRANTED", async () => {
+        const result = await persistence.exportHistory(individualId, {
+          ...(query.limit === undefined ? {} : { limit: query.limit }),
+          ...(query.cursor === undefined
+            ? {}
+            : {
+                cursor: {
+                  snapshotSequence: query.cursor.snapshotSequence,
+                  afterSequence: query.cursor.afterSequence,
+                },
+              }),
+        });
+        if (!result.ok) return result;
+        return {
+          ok: true,
+          value: {
+            format: "ezer-memory",
+            formatVersion: 1,
+            individualId,
+            snapshotSequence: result.value.snapshotSequence,
+            revisions: result.value.revisions.map((revision) => ({
+              individualId,
+              memoryId: revision.memoryId,
+              revision: revision.revision,
+              body: revision.body,
+              source: {
+                reference: revision.source.reference,
+                excerpt: revision.source.excerpt,
+              },
+              reason: revision.reason,
+              recordedAt: revision.recordedAt,
+              changeSequence: revision.changeSequence,
+            })),
+            nextCursor: result.value.nextCursor && {
+              snapshotSequence: result.value.nextCursor.snapshotSequence,
+              afterSequence: result.value.nextCursor.afterSequence,
+            },
+          },
+        };
+      });
+    },
     commit(command) {
       return perform(write, "WRITE_NOT_GRANTED", async () => {
         const content = {
