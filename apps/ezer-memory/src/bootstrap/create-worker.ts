@@ -10,6 +10,7 @@ import {
   createMemoryOperations,
   createExportMemoryHistory,
   createRestoreMemoryHistory,
+  createInspectMemoryRestore,
 } from "../modules/memory/application/index.ts";
 
 import {
@@ -110,6 +111,7 @@ export function createMemory(
       createSearchMemories(unitOfWork),
       createExportMemoryHistory(unitOfWork),
       createRestoreMemoryHistory(unitOfWork),
+      createInspectMemoryRestore(unitOfWork),
     ),
   };
 }

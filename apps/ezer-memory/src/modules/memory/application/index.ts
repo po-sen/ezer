@@ -9,3 +9,4 @@ export { createSearchMemories } from "./search-memories.ts";
 export { createMemoryOperations } from "./create-memory-operations.ts";
 export { createExportMemoryHistory } from "./export-memory-history.ts";
 export { createRestoreMemoryHistory } from "./restore-memory-history.ts";
+export { createInspectMemoryRestore } from "./inspect-memory-restore.ts";
