@@ -25,6 +25,9 @@ export function createListMemories(unitOfWork: UnitOfWork): ListMemories {
         return { ok: false, code: "INVALID_INPUT" };
       try {
         return unitOfWork.within((stores) => {
+          const restoring = stores.restore.read();
+          if (restoring && !restoring.complete)
+            return { ok: false, code: "RESTORE_IN_PROGRESS" } as const;
           const state = stores.state.read();
           const snapshotSequence =
             cursor?.snapshotSequence ?? state.changeSequence;

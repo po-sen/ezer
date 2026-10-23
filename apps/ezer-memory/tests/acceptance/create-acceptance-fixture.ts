@@ -29,7 +29,9 @@ import {
 } from "miniflare";
 
 // This fixture never loads deployment configuration, credentials, or real memory.
-export async function createAcceptanceFixture() {
+export async function createAcceptanceFixture(
+  options: { allowRestore?: boolean } = {},
+) {
   const root = mkdtempSync(join(realpathSync(tmpdir()), "ezer-acceptance-"));
   const originalCAs = getCACertificates("default");
   const servers: Server[] = [];
@@ -83,7 +85,7 @@ export async function createAcceptanceFixture() {
         "-days",
         "1",
         "-subj",
-        "/CN=Ezer synthetic loopback",
+        `/CN=Ezer synthetic ${randomUUID()}`,
         "-addext",
         "subjectAltName=IP:127.0.0.1",
         "-addext",
@@ -166,7 +168,8 @@ export async function createAcceptanceFixture() {
         scope:
           label === "connect-only"
             ? "ezer:connect"
-            : "ezer:connect ezer:memory:read ezer:memory:write",
+            : "ezer:connect ezer:memory:read ezer:memory:write" +
+              (options.allowRestore ? " ezer:memory:restore" : ""),
         client_id: "synthetic-acceptance",
       })
         .setProtectedHeader({ alg: "ES256", typ: "at+jwt", kid: "acceptance" })
@@ -187,7 +190,7 @@ export async function createAcceptanceFixture() {
           let length = 0;
           for await (const chunk of request) {
             length += chunk.length;
-            if (length > 64 * 1024) {
+            if (length > 2 * 1024 * 1024) {
               response.writeHead(413).end();
               return;
             }

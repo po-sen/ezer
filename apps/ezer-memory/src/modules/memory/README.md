@@ -131,9 +131,22 @@ this as `ezer_export`, advertised by `memoryExport`.
 
 The Memory-owned export contract has format `ezer-memory`, version 1, the logical
 individual ID, snapshot sequence, complete revisions, and a continuation cursor.
-It excludes Access data, native storage IDs, and retry-operation records. Export
-does not implement import, restore, deletion, or identity/epoch migration; a
-complete content archive is not a tested database recovery mechanism.
+It excludes Access data, native storage IDs, and retry-operation records. `RestoreMemoryHistory` accepts validated version 1 history for the same logical
+identity into an empty target, with a distinct restore grant. It owns ordered
+page validation, exact retry comparison, revision-chain reconstruction, and
+atomic publication. A context-owned Restore Store pins the session and snapshot.
+Each pending page advances internal progress in the existing Unit of Work, but
+all ordinary content use cases refuse access until completion. Identity publishes
+sequence 0 while pending. No partial history is externally readable.
+
+Both SQLite and Durable Object independently own additive version 2 SQL for the
+restore session. They retain completed session metadata for retries. A failed
+page rolls back; interruption leaves earlier pages staged for the original
+archive to resume. There is no cancel, merge, overwrite, deletion, or identity/epoch
+migration. Old operation receipts and Access configuration are not recovered.
+An unsigned content archive cannot prove authorship or establish production
+disaster recovery. Reverting code does not reverse the schema upgrade or pending work; version 1
+code rejects the newer schema. Resume with restore-aware code.
 
 ## Outside this context
 

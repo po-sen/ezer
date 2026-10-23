@@ -446,12 +446,12 @@ describe("persistent memory through the internal Durable Object binding", () => 
       expect(() =>
         initializeIndividual(state.storage, "another-individual"),
       ).toThrow("identity mismatch");
-      state.storage.kv.put("memory:schema-version", 2);
+      state.storage.kv.put("memory:schema-version", 999);
       expect(() => migrateMemory(state.storage)).toThrow(
         "Unsupported memory schema",
       );
-      expect(state.storage.kv.get("memory:schema-version")).toEqual(2);
-      state.storage.kv.put("memory:schema-version", 1);
+      expect(state.storage.kv.get("memory:schema-version")).toEqual(999);
+      state.storage.kv.put("memory:schema-version", 2);
     });
     await evictDurableObject(alice);
     expect(await alice.inspect({ memoryId: "preference" })).toEqual(before);

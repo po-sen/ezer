@@ -8,6 +8,7 @@ interface Settings {
   readonly connectionScope: string;
   readonly readScope: string;
   readonly writeScope: string;
+  readonly restoreScope: string;
 }
 
 export function createOAuthAuthority(
@@ -60,6 +61,7 @@ export function createOAuthAuthority(
               [settings.connectionScope, "connect"],
               [settings.readScope, "read-memory"],
               [settings.writeScope, "write-memory"],
+              [settings.restoreScope, "restore-memory"],
             ] as const
           ).flatMap(([scope, permission]) =>
             token.scope.includes(scope) ? [permission] : [],

@@ -81,6 +81,6 @@ export function createMemoryMcpHandler(
       registerMemoryTools(server, memory);
       return server;
     },
-    { legacy: "stateless", maxRequestBodySize: 64 * 1024 },
+    { legacy: "stateless", maxRequestBodySize: 2 * 1024 * 1024 },
   );
 }

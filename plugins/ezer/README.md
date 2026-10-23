@@ -166,7 +166,7 @@ The repository's [local acceptance runner](../../apps/ezer-memory/ACCEPTANCE.md)
 exercises generated packages with isolated synthetic services, and can run real
 Codex/Claude Code sessions separately from CI.
 Local package and backend tests do not establish remote login or cross-computer
-continuity. Physical deletion, import/restore, verified disaster-recovery backup, semantic search, and attachments are not
+continuity. Physical deletion, cross-identity import, verified production disaster-recovery backup, semantic search, and attachments are not
 provided by this plugin.
 
 ## Packaging rationale
@@ -184,3 +184,10 @@ implementation and preserves native HTTP/OAuth, without a host-specific proxy.
 This is a repository-distributed alpha, not an OpenAI or Anthropic public-directory
 submission. Publishing a listing and verifying real-provider compatibility are
 separate release work.
+
+The packaged restore reference uses `ezer_restore` only on an explicit recovery
+request. It validates the full archive before writing, uses one stable restore
+ID, resumes identical pages after interruption, and verifies by exporting the
+restored snapshot. The same logical identity, empty target, and separate restore
+permission are required. Incomplete restoration blocks normal memory access
+until resumed; there is no cancel or overwrite operation.

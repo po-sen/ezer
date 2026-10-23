@@ -67,14 +67,18 @@ opt-in, uses existing host login, and reports model results separately. See
 PostgreSQL test service described in the service README. Persistence tests
 use synthetic data through the internal `EZER_MEMORY` binding. Public identity
 lookup may read only the server-authorized object's change sequence. Memory tools
-must use the connection's server-authorized logical identity and separate read/write
+must use the connection's server-authorized logical identity and separate read/write/restore
 grants. Never accept a client-selected individual or native storage ID. Memory's
 application enforces these grants before calling its persistence port; HTTP delivery
 reauthorizes every request, and connection permission alone grants no content access.
 Export uses the same read grant and authorized identity. Its versioned format
 contains full immutable revisions at a fixed change-sequence snapshot, never
 authorization data, native storage IDs, or operation receipts. Keep export pages
-bounded and preserve earlier revisions; import and restore are not implemented.
+bounded and preserve earlier revisions; restore accepts the same logical identity into an empty target with a separate
+restore grant. Pending restoration blocks ordinary content reads/writes until
+atomic completion; identity exposes only the published sequence (0 while pending).
+Preserve exact historical fields and retry safety. Never add overwrite, cross-identity
+transfer, automatic reset, or cancel without explicit behavior design.
 Worker declarations are generated with `wrangler types`; commit the output after
 configuration, export, or Wrangler changes. Never hand-edit or format
 `apps/ezer-memory/worker-configuration.d.ts`. The full check rejects stale types
@@ -189,7 +193,7 @@ ports, application, domain, or delivery. Validate declaration origins as well as
 import paths so aliases and barrels cannot bypass this boundary. Bootstrap may
 compose both contexts and the ACL; it must not perform contract translation.
 
-Access owns verified callers, connection/read/write permissions, and caller-to-individual
+Access owns verified callers, connection/read/write/restore permissions, and caller-to-individual
 assignments. Its `CredentialVerifier` port accepts opaque proof and returns
 Access-owned facts. JWT algorithms, issuer/audience checks, JWKS URLs, key caching,
 and scope-to-permission translation stay in the JWT adapter. Hosted OAuth token validation and grant-to-individual restrictions belong to the

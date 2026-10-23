@@ -4,6 +4,7 @@ import { createIndividualStateStore } from "./individual-state-store.ts";
 import { createOperationStore } from "./operation-store.ts";
 import { createRevisionStore } from "./revision-store.ts";
 import { createSqlSession } from "./create-sql-session.ts";
+import { createRestoreStore } from "./restore-store.ts";
 export function createDurableObjectUnitOfWork(
   storage: DurableObjectStorage,
 ): UnitOfWork {
@@ -20,6 +21,7 @@ export function createDurableObjectUnitOfWork(
           try {
             const result = work({
               state: createIndividualStateStore(session),
+              restore: createRestoreStore(session),
               revisions: createRevisionStore(session),
               operations: createOperationStore(session),
             });

@@ -101,6 +101,7 @@ test("packages isolated portable and native connections from an explicit source 
         `plugins/${name}/skills/${name}/SKILL.md`,
         `plugins/${name}/skills/${name}/references/connection.md`,
         `plugins/${name}/skills/${name}/references/exporting-memories.md`,
+        `plugins/${name}/skills/${name}/references/restoring-memories.md`,
         `plugins/${name}/skills/${name}/references/writing-memories.md`,
       ].sort(),
     );

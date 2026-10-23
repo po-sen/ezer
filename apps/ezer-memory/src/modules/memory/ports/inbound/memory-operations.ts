@@ -9,7 +9,12 @@ import type { MemorySearchQuery } from "./memory-search-query.ts";
 import type { MemorySearchPage } from "./memory-search-page.ts";
 import type { MemoryExportQuery } from "./memory-export-query.ts";
 import type { MemoryExportPage } from "./memory-export-page.ts";
+import type { MemoryRestoreProgress } from "./memory-restore-progress.ts";
 export interface MemoryOperations {
+  restoreHistory(command: {
+    readonly restoreId: string;
+    readonly page: MemoryExportPage;
+  }): Promise<MemoryResult<MemoryRestoreProgress>>;
   commit(command: MemoryWrite): Promise<MemoryResult<MemoryReceipt>>;
   inspect(query: MemoryLookup): Promise<MemoryResult<MemoryInspection>>;
   list(query: MemoryPageQuery): Promise<MemoryResult<MemoryPage>>;

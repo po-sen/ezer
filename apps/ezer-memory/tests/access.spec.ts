@@ -68,6 +68,7 @@ describe("authenticated Ezer identity", () => {
         "ezer:connect",
         "ezer:memory:read",
         "ezer:memory:write",
+        "ezer:memory:restore",
       ],
       bearer_methods_supported: ["header"],
     });
@@ -447,7 +448,11 @@ describe("authenticated Ezer identity", () => {
       individual: {
         callerId: "bob",
         individualId: "ezer-bob",
-        capabilities: { readMemory: false, writeMemory: false },
+        capabilities: {
+          readMemory: false,
+          writeMemory: false,
+          restoreMemory: false,
+        },
       },
     });
     expect(await access.authorize(null)).toEqual({

@@ -19,6 +19,10 @@ const command = {
 };
 function persistence() {
   return {
+    restoreHistory: vi.fn<MemoryPersistence["restoreHistory"]>(async () => ({
+      ok: false,
+      code: "RESTORE_NOT_GRANTED",
+    })),
     exportHistory: vi.fn<MemoryPersistence["exportHistory"]>(async () => ({
       ok: false,
       code: "NOT_FOUND",
@@ -43,10 +47,93 @@ function persistence() {
 }
 
 describe("Memory-owned operation grants", () => {
+  it("detaches restore requests, rejects foreign identities before persistence, and preserves the captured grant", async () => {
+    const gateway = persistence();
+    const connection = {
+      individualId: "alice",
+      capabilities: { read: false, write: false, restore: true },
+    };
+    const operations = createMemoryOperations(connection, gateway);
+    connection.capabilities.restore = false;
+    connection.individualId = "bob";
+    const input = {
+      restoreId: "one",
+      page: {
+        format: "ezer-memory" as const,
+        formatVersion: 1 as const,
+        individualId: "alice",
+        snapshotSequence: 1,
+        revisions: [
+          {
+            individualId: "alice",
+            memoryId: "memory",
+            revision: 1,
+            body: "Original",
+            source: { reference: "test:original", excerpt: "Evidence" },
+            reason: null,
+            recordedAt: "2026-09-30T00:00:00.000Z",
+            changeSequence: 1,
+          },
+        ],
+        nextCursor: null,
+      },
+    };
+    gateway.restoreHistory.mockImplementation(async (id, submitted) => {
+      input.page.revisions[0]!.body = "Mutated after submission";
+      input.page.revisions[0]!.source.excerpt = "Mutated evidence";
+      expect(id).toBe("alice");
+      expect(submitted.revisions[0]).toMatchObject({
+        body: "Original",
+        source: { excerpt: "Evidence" },
+      });
+      expect(submitted.revisions[0]).not.toHaveProperty("individualId");
+      return {
+        ok: true,
+        value: {
+          restoreId: "one",
+          snapshotSequence: 1,
+          restoredSequence: 1,
+          complete: true,
+          privateOwner: "ignored",
+        },
+      };
+    });
+    expect(await operations.restoreHistory(input)).toEqual({
+      ok: true,
+      value: {
+        restoreId: "one",
+        snapshotSequence: 1,
+        restoredSequence: 1,
+        complete: true,
+      },
+    });
+    gateway.restoreHistory.mockClear();
+    expect(
+      await operations.restoreHistory({
+        ...input,
+        page: { ...input.page, individualId: "bob" },
+      }),
+    ).toEqual({ ok: false, code: "IDENTITY_MISMATCH" });
+    const denied = createMemoryOperations(
+      {
+        individualId: "alice",
+        capabilities: { read: true, write: true, restore: false },
+      },
+      gateway,
+    );
+    expect(await denied.restoreHistory(input)).toEqual({
+      ok: false,
+      code: "RESTORE_NOT_GRANTED",
+    });
+    expect(gateway.restoreHistory).not.toHaveBeenCalled();
+  });
   it("denies access before touching any persistence capability", async () => {
     const gateway = persistence();
     const operations = createMemoryOperations(
-      { individualId: "alice", capabilities: { read: false, write: false } },
+      {
+        individualId: "alice",
+        capabilities: { read: false, write: false, restore: false },
+      },
       gateway,
     );
     expect(await operations.commit(command)).toEqual({
@@ -81,7 +168,7 @@ describe("Memory-owned operation grants", () => {
     const gateway = persistence();
     const connection = {
       individualId: "alice",
-      capabilities: { read: true, write: false },
+      capabilities: { read: true, write: false, restore: false },
     };
     const operations = createMemoryOperations(connection, gateway);
     connection.individualId = "bob";
@@ -97,7 +184,10 @@ describe("Memory-owned operation grants", () => {
     });
     expect(
       await createMemoryOperations(
-        { individualId: "../bob", capabilities: { read: true, write: true } },
+        {
+          individualId: "../bob",
+          capabilities: { read: true, write: true, restore: false },
+        },
         gateway,
       ).list({}),
     ).toEqual({ ok: false, code: "INVALID_INPUT" });
@@ -121,7 +211,10 @@ describe("Memory-owned operation grants", () => {
       value: { changeSequence: 1, memory: stored },
     });
     const operations = createMemoryOperations(
-      { individualId: "alice", capabilities: { read: true, write: true } },
+      {
+        individualId: "alice",
+        capabilities: { read: true, write: true, restore: false },
+      },
       gateway,
     );
     const result = await operations.inspect({ memoryId: "memory" });
@@ -148,7 +241,10 @@ describe("Memory-owned operation grants", () => {
   it("maps persistence failures without retaining diagnostics", async () => {
     const gateway = persistence();
     const operations = createMemoryOperations(
-      { individualId: "alice", capabilities: { read: true, write: true } },
+      {
+        individualId: "alice",
+        capabilities: { read: true, write: true, restore: false },
+      },
       gateway,
     );
     for (const method of Object.values(gateway))
@@ -217,7 +313,10 @@ describe("Memory export invariants", () => {
       return { ok: true, value: stored };
     });
     const operations = createMemoryOperations(
-      { individualId: "alice", capabilities: { read: true, write: false } },
+      {
+        individualId: "alice",
+        capabilities: { read: true, write: false, restore: false },
+      },
       gateway,
     );
     const result = await operations.exportHistory({ limit: 1, cursor });
@@ -316,7 +415,10 @@ describe("Memory search invariants", () => {
       return { ok: true, value: stored };
     });
     const operations = createMemoryOperations(
-      { individualId: "alice", capabilities: { read: true, write: false } },
+      {
+        individualId: "alice",
+        capabilities: { read: true, write: false, restore: false },
+      },
       gateway,
     );
     const result = await operations.search({ query: "text", cursor });
@@ -397,7 +499,10 @@ describe("Memory pagination invariants", () => {
       return { ok: true, value: stored };
     });
     const operations = createMemoryOperations(
-      { individualId: "alice", capabilities: { read: true, write: false } },
+      {
+        individualId: "alice",
+        capabilities: { read: true, write: false, restore: false },
+      },
       gateway,
     );
     const result = await operations.list({ order: "newest", cursor });

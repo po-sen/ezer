@@ -4,6 +4,8 @@ const labels: Record<string, string> = {
   "ezer:connect": "Connect to this Ezer and view its identity",
   "ezer:memory:read": "Read this Ezer's memories and history",
   "ezer:memory:write": "Create and correct this Ezer's memories",
+  "ezer:memory:restore":
+    "Restore complete history into this Ezer only if its memory is empty",
   offline_access: "Stay connected for up to seven days",
 };
 
@@ -33,7 +35,7 @@ ${details.redirectIsLoopback ? "<p><strong>This connects an app on your computer
 <input type="hidden" name="caller" value="${escape(callerId)}">
 <input type="hidden" name="individual" value="${escape(individualId)}">
 <fieldset><legend>Allow this client to:</legend>
-${details.scope.map((scope) => `<p><label><input type="checkbox" name="scope" value="${escape(scope)}" checked> ${escape(labels[scope] ?? scope)}</label></p>`).join("")}
+${details.scope.map((scope) => `<p><label><input type="checkbox" name="scope" value="${escape(scope)}"${scope === "ezer:memory:restore" ? "" : " checked"}> ${escape(labels[scope] ?? scope)}</label></p>`).join("")}
 </fieldset>
 <p>You can remove permissions above. Without connection permission, the client cannot use this Ezer.</p>
 <button name="decision" value="approve">Allow</button>

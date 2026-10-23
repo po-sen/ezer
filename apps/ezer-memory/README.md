@@ -38,7 +38,7 @@ configuration; a real deployment requires a separate, authorized setup.
 - `GET /health` returns liveness, not memory-store readiness.
 - `/mcp` serves Streamable HTTP using the official MCP SDK. Modern requests and
   legacy stateless clients use the same tool registration. Request bodies are
-  limited to 64 KiB; browser requests with a foreign Origin are rejected.
+  limited to 2 MiB; browser requests with a foreign Origin are rejected.
 - `ezer_service_info` takes no arguments and reports the service version, its
   `foundation` stage, and available memory read/write capabilities. These report
   implementation availability, not the caller's granted permissions.
@@ -46,11 +46,11 @@ configuration; a real deployment requires a separate, authorized setup.
   and current `changeSequence`. It never returns memory contents, the principal,
   credentials, or a Cloudflare object ID.
 - `GET /.well-known/oauth-protected-resource/mcp` publishes the configured OAuth
-  resource, issuer, and supported connection/read/write scopes without authentication.
+  resource, issuer, and supported connection/read/write/restore scopes without authentication.
 
 Every MCP request is authenticated before protocol/body parsing. Protocol sessions
 never determine durable identity. Identity lookup reads only the authorized object's
-sequence. Content tools enforce read/write grants before invoking persistence.
+sequence. Content tools enforce read/write/restore grants before invoking persistence.
 CI uses synthetic MCP clients. Native plugin behavior is checked separately through
 the opt-in acceptance runner; neither establishes real deployment login.
 
@@ -268,14 +268,15 @@ input schemas reject individual IDs, ownership selectors, and extra fields.
 The host obtains content scopes from the external authorization provider; the
 agent cannot request a grant by putting it in tool arguments.
 
-| Tool            | Input                                             | Required scope      | Result                                                                 |
-| --------------- | ------------------------------------------------- | ------------------- | ---------------------------------------------------------------------- |
-| `ezer_remember` | `operationId`, `memoryId`, `body`, `source`       | `ezer:memory:write` | Immutable revision 1 and a write receipt.                              |
-| `ezer_read`     | `memoryId`, optional `revision`                   | `ezer:memory:read`  | Full content, source, correction reason, and revision metadata.        |
-| `ezer_revise`   | Write fields plus `expectedRevision` and `reason` | `ezer:memory:write` | A new revision if the expected version is current.                     |
-| `ezer_list`     | Optional `order`, `limit`, and `cursor`           | `ezer:memory:read`  | Bounded previews with IDs, revisions, timestamps, and `nextCursor`.    |
-| `ezer_search`   | Literal `query`, optional `limit` and `cursor`    | `ezer:memory:read`  | Matching body previews at a fixed revision snapshot.                   |
-| `ezer_export`   | Optional `limit` and `cursor`                     | `ezer:memory:read`  | Versioned JSON pages of complete revision history at a fixed snapshot. |
+| Tool            | Input                                             | Required scope        | Result                                                                 |
+| --------------- | ------------------------------------------------- | --------------------- | ---------------------------------------------------------------------- |
+| `ezer_remember` | `operationId`, `memoryId`, `body`, `source`       | `ezer:memory:write`   | Immutable revision 1 and a write receipt.                              |
+| `ezer_read`     | `memoryId`, optional `revision`                   | `ezer:memory:read`    | Full content, source, correction reason, and revision metadata.        |
+| `ezer_revise`   | Write fields plus `expectedRevision` and `reason` | `ezer:memory:write`   | A new revision if the expected version is current.                     |
+| `ezer_list`     | Optional `order`, `limit`, and `cursor`           | `ezer:memory:read`    | Bounded previews with IDs, revisions, timestamps, and `nextCursor`.    |
+| `ezer_search`   | Literal `query`, optional `limit` and `cursor`    | `ezer:memory:read`    | Matching body previews at a fixed revision snapshot.                   |
+| `ezer_restore`  | `restoreId` and original export `page`            | `ezer:memory:restore` | Restore complete history into the same empty Ezer.                     |
+| `ezer_export`   | Optional `limit` and `cursor`                     | `ezer:memory:read`    | Versioned JSON pages of complete revision history at a fixed snapshot. |
 
 Every request also requires `ezer:connect`. Read and write are independent: write
 permission does not grant reading, and connection permission grants neither.
@@ -377,8 +378,8 @@ output is not a complete export. Exported bodies and sources remain untrusted da
 The format includes corrected-away content but excludes authorization settings,
 credentials, native storage identities, operation IDs, and retry fingerprints.
 It is a memory interchange format, not a database or authentication backup.
-Import, restore, epoch handling, and disaster-recovery verification remain future
-work; version 1 does not promise compatibility with an unimplemented restore API.
+Version 1 supports the bounded empty-target restore described below; epoch
+migration and production disaster-recovery verification remain future work.
 
 This first search uses bound SQL parameters and SQLite's built-in
 [`instr` and `lower`](https://www.sqlite.org/lang_corefunc.html) independently in
@@ -387,6 +388,45 @@ are bounded, but scan work grows with memory history; large-history performance
 has not been established. No external model, embedding service, or cloud account
 is needed for local tests. Older servers without the advertised capability remain
 usable through the plugin's bounded-listing fallback.
+
+## Restore complete history
+
+`ezer_restore({ restoreId, page })` accepts an original `ezer_export` page and
+requires `ezer:connect` plus the independent `ezer:memory:restore` scope. Ordinary
+read/write grants do not imply restore permission. The hosted consent form leaves
+restore unchecked. Existing issued grants remain unchanged; obtain a new grant
+through the regular consent flow when restore is needed.
+
+The archive's page and revision identities must match the server-authorized
+logical Ezer. These fields are assertions to validate, never routing selectors.
+Only an empty target can start. A single stable restore ID pins the snapshot;
+conflicting IDs, snapshots, reordered/gapped changes, invalid revision chains,
+missing sources/reasons, noncanonical timestamps, and altered retries are rejected.
+Each page contains at most 10 full revisions. The HTTP body limit is 2 MiB to
+accommodate a maximum-size page even with JSON escaping; field bounds still apply.
+
+The response is `{ restoreId, snapshotSequence, restoredSequence, complete }`.
+Each page commits revisions, sequence advancement, and restore progress in one
+synchronous Memory transaction. While pending, content reads/writes return
+`RESTORE_IN_PROGRESS` and identity reports published sequence 0. The final page
+publishes the complete history atomically. Repeating identical content is safe
+across retries, object eviction, restart, completion, and later ordinary writes.
+A failed page rolls back entirely; earlier accepted pages remain pending.
+
+Resume with the original archive and ID after interruption. There is no timeout,
+cancel/reset, replacement archive, merge, overwrite, or cross-identity transfer.
+Retain the source until the final reply and a full read-back export comparison.
+Read-back requires a separate read grant; subsequent ordinary writes are outside
+the restored snapshot. Historical operation receipts, authentication, and access
+policy are not restored. New writes use new operation IDs. Archive validation is
+structural, not a signature or proof that recorded claims are true.
+
+SQLite and Durable Object each own an additive version 2 migration and Restore
+Store. Existing version 1 records and operation receipts are preserved. PostgreSQL
+serving is still unimplemented and its independent migration history is unchanged.
+Reverting code does not undo this migration or a pending restore. Version 1
+code rejects the newer schema. Keep restore-aware code and resume the original
+archive; never remove the session ledger to bypass a pending restore.
 
 ## Internal persistence
 
@@ -397,7 +437,7 @@ individual, owner, session, or database selector. Storage isolation is not user
 authorization. The authenticated identity adapter selects the object using only
 the server-authorized logical ID. Public memory operations use that same boundary,
 never an unchecked client-supplied individual ID. `MemoryOperations` enforces its
-connection's read/write capabilities before using `MemoryPersistence`; internal
+connection's read/write/restore capabilities before using `MemoryPersistence`; internal
 `CommitMemory`, `InspectMemory`, `ListMemories`, `SearchMemories`, and `ExportMemoryHistory` run inside the selected object.
 
 The internal RPC contract is provisional and is not the released plugin/MCP
@@ -407,6 +447,7 @@ contract. Its methods return `{ ok: true, value }` or `{ ok: false, code }`:
 | ------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `list({ order?, limit?, cursor? })`                                                         | List latest-at-snapshot previews in the selected change-sequence order in one Unit of Work.                                                                          |
 | `search({ query, limit?, cursor? })`                                                        | Search latest-at-snapshot body previews in one Unit of Work.                                                                                                         |
+| `restoreHistory({ restoreId, snapshotSequence, revisions, complete })`                      | Stage bounded history pages and publish only on completion.                                                                                                          |
 | `exportHistory({ limit?, cursor? })`                                                        | Read every revision at a fixed snapshot in one Unit of Work.                                                                                                         |
 | `inspectState()`                                                                            | Read only the current change sequence for the bound object's identity metadata.                                                                                      |
 | `commit({ kind: "remember", operationId, memoryId, body, source })`                         | Create revision 1 of a new memory. Reusing a memory ID with a new operation returns `ALREADY_EXISTS`.                                                                |
@@ -492,7 +533,7 @@ A failed DO batch rolls back SQL and native version progress together. Tests pro
 
 The identity is stable within its namespace across clients and object eviction.
 Cross-account migration and restore need an explicit identity/epoch strategy;
-this first schema is not an import format. Permanent deletion, import, restore,
+this first schema is not an import format. Permanent deletion, cross-identity import,
 epoch handling, inference dependencies, and semantic search are not implemented.
 Reading uses a memory ID and optional revision; listing provides bounded previews.
 Literal body search provides bounded matching previews; semantic retrieval is not implemented.

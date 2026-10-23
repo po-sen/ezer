@@ -17,6 +17,7 @@ export function createConnectMemory(
             capabilities: {
               read: result.capabilities.read,
               write: result.capabilities.write,
+              restore: result.capabilities.restore,
             },
           };
         }

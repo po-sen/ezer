@@ -23,7 +23,11 @@ describe("Access-owned authorization semantics", () => {
       individual: {
         callerId: "caller-a",
         individualId: "ezer-a",
-        capabilities: { readMemory: false, writeMemory: false },
+        capabilities: {
+          readMemory: false,
+          writeMemory: false,
+          restoreMemory: false,
+        },
       },
     });
     expect(verify).toHaveBeenCalledExactlyOnceWith("synthetic-ticket");

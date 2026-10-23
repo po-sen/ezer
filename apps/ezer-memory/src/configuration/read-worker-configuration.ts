@@ -60,7 +60,14 @@ export function readWorkerConfiguration(configuration: unknown) {
   const connectionScope = "ezer:connect";
   const readScope = "ezer:memory:read";
   const writeScope = "ezer:memory:write";
-  const scopes = [connectionScope, readScope, writeScope, "offline_access"];
+  const restoreScope = "ezer:memory:restore";
+  const scopes = [
+    connectionScope,
+    readScope,
+    writeScope,
+    restoreScope,
+    "offline_access",
+  ];
   const hosted = "provider" in policy;
   const issuer = hosted ? new URL(resource).origin : policy.issuer;
   return {
@@ -74,10 +81,19 @@ export function readWorkerConfiguration(configuration: unknown) {
           connectionScope,
           readScope,
           writeScope,
+          restoreScope,
         },
     access: hosted ? policy.access : undefined,
     oauth: hosted
-      ? { issuer, resource, scopes, connectionScope, readScope, writeScope }
+      ? {
+          issuer,
+          resource,
+          scopes,
+          connectionScope,
+          readScope,
+          writeScope,
+          restoreScope,
+        }
       : undefined,
     http: {
       resource,
@@ -85,6 +101,7 @@ export function readWorkerConfiguration(configuration: unknown) {
       connectionScope,
       readScope,
       writeScope,
+      restoreScope,
       ...(hosted ? { authorizationScopes: scopes } : {}),
     },
   };

@@ -22,6 +22,11 @@ type Result<T> =
   | {
       readonly ok: false;
       readonly code:
+        | "RESTORE_NOT_GRANTED"
+        | "RESTORE_IN_PROGRESS"
+        | "RESTORE_CONFLICT"
+        | "TARGET_NOT_EMPTY"
+        | "IDENTITY_MISMATCH"
         | "READ_NOT_GRANTED"
         | "WRITE_NOT_GRANTED"
         | "INVALID_INPUT"
@@ -42,6 +47,29 @@ interface ListingCursor extends Cursor {
 }
 // Logical individual routing and detached content, never a storage handle or native owner ID.
 export interface MemoryPersistence {
+  restoreHistory(
+    individualId: string,
+    command: {
+      readonly restoreId: string;
+      readonly snapshotSequence: number;
+      readonly complete: boolean;
+      readonly revisions: readonly (Receipt & {
+        readonly body: string;
+        readonly source: {
+          readonly reference: string;
+          readonly excerpt: string;
+        };
+        readonly reason: string | null;
+      })[];
+    },
+  ): Promise<
+    Result<{
+      readonly restoreId: string;
+      readonly snapshotSequence: number;
+      readonly restoredSequence: number;
+      readonly complete: boolean;
+    }>
+  >;
   exportHistory(
     individualId: string,
     query: { readonly limit?: number; readonly cursor?: Cursor },

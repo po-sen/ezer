@@ -149,7 +149,8 @@ search lets the agent retrieve matching memories without paging through every
 preview; it preserves the same authorization and snapshot boundaries.
 On request, the plugin can export complete revision history as versioned JSON
 pages, including original sources and superseded content. Export uses a fixed
-snapshot and read permission; import and restore remain future work.
+snapshot and read permission; restore uses a separate grant and accepts only the same Ezer into empty memory,
+preserving complete history. It does not merge or overwrite existing data.
 
 ```sh
 pnpm --filter @ezer/memory dev

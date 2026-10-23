@@ -21,3 +21,5 @@ export type { SearchMemories } from "./search-memories.ts";
 export type { ExportMemoryHistory } from "./export-memory-history.ts";
 export type { MemoryExportQuery } from "./memory-export-query.ts";
 export type { MemoryExportPage } from "./memory-export-page.ts";
+export type { MemoryRestoreProgress } from "./memory-restore-progress.ts";
+export type { RestoreMemoryHistory } from "./restore-memory-history.ts";

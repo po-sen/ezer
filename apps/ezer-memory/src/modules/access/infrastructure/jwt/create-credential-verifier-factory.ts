@@ -8,6 +8,7 @@ interface JwtSettings {
   readonly connectionScope: string;
   readonly readScope: string;
   readonly writeScope: string;
+  readonly restoreScope: string;
 }
 
 export function createCredentialVerifierFactory() {
@@ -69,6 +70,7 @@ export function createCredentialVerifierFactory() {
               [authority.connectionScope, "connect"],
               [authority.readScope, "read-memory"],
               [authority.writeScope, "write-memory"],
+              [authority.restoreScope, "restore-memory"],
             ] as const
           ).flatMap(([scope, permission]) =>
             typeof payload.scope === "string" &&

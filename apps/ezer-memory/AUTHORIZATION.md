@@ -27,7 +27,7 @@ client secret. Nothing in the plugin contains credentials.
    refresh tokens are issued only when `offline_access` was approved, for a fixed
    seven-day refresh window. Refresh rotation and revocation use the library.
 6. Every MCP request validates Ezer's token against the OAuth KV store and checks
-   the current assignment. Memory independently enforces read/write capabilities.
+   the current assignment. Memory independently enforces read/write/restore capabilities.
 
 An Access browser assertion is never accepted as an MCP access token. Client
 labels, cookies and arbitrary request headers cannot choose an Ezer. A grant is
@@ -106,7 +106,7 @@ consent page. No permission is silently added after approval.
 | `ezer:memory:write` | Create memories and append corrections                             |
 | `offline_access`    | Receive a rotating refresh token for the seven-day window          |
 
-Connection permission is required, and read/write permissions are independent.
+Connection permission is required, and read/write/restore permissions are independent.
 An operator-admitted, assigned person may consent to all three Ezer permissions;
 there is no role-administration UI or per-person permission ceiling in this release.
 Granting only connection permission cannot read memory contents. A denied tool
@@ -166,3 +166,13 @@ References: [Workers OAuth Provider](https://github.com/cloudflare/workers-oauth
 [consent helpers](https://github.com/cloudflare/workers-oauth-provider/blob/main/docs/consent-page.md),
 [Access JWT validation](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/authorization-cookie/validating-json/),
 and [Access application paths](https://developers.cloudflare.com/cloudflare-one/access-controls/policies/app-paths/).
+
+## Restore consent
+
+Memory recovery uses the separate `ezer:memory:restore` scope. It is advertised
+by resource and authorization metadata but unchecked on the consent form. Request
+and explicitly select it only for an authorized empty-target recovery. Existing
+read/write grants cannot restore; obtain a new consented grant rather than
+editing stored OAuth records. Read-back verification separately requires
+`ezer:memory:read`. Revocation and per-request assignment checks apply to every
+restore page, including a resumed session.
