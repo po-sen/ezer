@@ -7,6 +7,7 @@ import type {
   SearchMemories,
   ExportMemoryHistory,
   RestoreMemoryHistory,
+  InspectMemoryRestore,
 } from "../ports/inbound/index.ts";
 
 import { memoryExportPageSchema } from "./memory-export-page-schema.ts";
@@ -77,8 +78,16 @@ export function createMemoryRpcHandler(
   search: SearchMemories,
   exportHistory: ExportMemoryHistory,
   restoreHistory: RestoreMemoryHistory,
+  restoreStatus: InspectMemoryRestore,
 ) {
   return {
+    inspectRestore() {
+      try {
+        return restoreStatus.execute();
+      } catch {
+        return { ok: false, code: "INTERNAL_ERROR" } as const;
+      }
+    },
     restoreHistory(input: unknown) {
       const parsed = restoreCommand.safeParse(input);
       if (!parsed.success) return { ok: false, code: "INVALID_INPUT" } as const;

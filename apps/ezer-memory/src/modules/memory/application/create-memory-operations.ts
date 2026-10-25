@@ -32,6 +32,24 @@ export function createMemoryOperations(
     }
   }
   return {
+    inspectRestore() {
+      return perform(restore === true, "RESTORE_NOT_GRANTED", async () => {
+        const result = await persistence.inspectRestore(individualId);
+        if (!result.ok) return result;
+        const progress = result.value.restore;
+        return {
+          ok: true,
+          value: {
+            restore: progress && {
+              restoreId: progress.restoreId,
+              snapshotSequence: progress.snapshotSequence,
+              restoredSequence: progress.restoredSequence,
+              complete: progress.complete,
+            },
+          },
+        };
+      });
+    },
     restoreHistory(command) {
       return perform(restore === true, "RESTORE_NOT_GRANTED", async () => {
         const { page } = command;

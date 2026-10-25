@@ -176,3 +176,6 @@ read/write grants cannot restore; obtain a new consented grant rather than
 editing stored OAuth records. Read-back verification separately requires
 `ezer:memory:read`. Revocation and per-request assignment checks apply to every
 restore page, including a resumed session.
+The same restore grant authorizes the read-only `ezer_restore_status` metadata
+query. Connection/read/write grants alone cannot query restore progress. This
+does not grant content reads or authorize the agent to resume without a request.

@@ -1,6 +1,6 @@
 ---
 name: ezer
-description: Continue an Ezer assistant or companion across conversations using its connected memory service. Use when the user activates this Ezer or continues an interaction with it, including learning, correcting memories, exporting them, and restoring a complete archive on request.
+description: Continue an Ezer assistant or companion across conversations using its connected memory service. Use when the user activates this Ezer or continues an interaction with it, including learning, correcting memories, exporting them, checking restore progress, and restoring a complete archive on request.
 ---
 
 # Continue Ezer
@@ -105,6 +105,13 @@ as amnesia or fabricate recovered knowledge. There is no physical deletion tool:
 a correction preserves old revisions, so it cannot fulfill a request to erase
 stored data. Explain that limitation and stop further storage of the affected
 information until the operator can handle deletion.
+
+On `RESTORE_IN_PROGRESS`, explain that memory is temporarily unavailable during
+an incomplete restore. When `memoryRestoreStatus` is advertised, query
+`ezer_restore_status({})` for authorized progress and follow
+[restoring memories](references/restoring-memories.md). A missing restore grant
+does not permit reading progress through another identity. A status request or
+ordinary conversation never authorizes resuming the restore.
 
 ## Restore on request
 

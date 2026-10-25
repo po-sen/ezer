@@ -47,6 +47,7 @@ describe("Worker MCP boundary", () => {
       expect(tools.map((tool) => tool.name)).toEqual([
         "ezer_identity",
         "ezer_service_info",
+        "ezer_restore_status",
         "ezer_restore",
         "ezer_remember",
         "ezer_read",
@@ -70,6 +71,7 @@ describe("Worker MCP boundary", () => {
           memoryRecent: true,
           memoryExport: true,
           memoryRestore: true,
+          memoryRestoreStatus: true,
         },
       });
     } finally {
@@ -137,6 +139,7 @@ describe("Worker MCP boundary", () => {
       memoryRecent: true,
       memoryExport: true,
       memoryRestore: true,
+      memoryRestoreStatus: true,
     });
   });
 

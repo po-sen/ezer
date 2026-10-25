@@ -139,6 +139,15 @@ Each pending page advances internal progress in the existing Unit of Work, but
 all ordinary content use cases refuse access until completion. Identity publishes
 sequence 0 while pending. No partial history is externally readable.
 
+`InspectMemoryRestore` reads the existing session and accepted sequence in the
+same Unit of Work. `MemoryOperations.inspectRestore` gates it with the restore
+grant and projects only restore metadata. MCP exposes `ezer_restore_status`,
+advertised by `memoryRestoreStatus`. No session is `{ restore: null }`, not a claim
+of empty memory; a session returns its ID, snapshot, accepted sequence, and
+completion flag. Completed progress excludes subsequent normal writes. The query
+does not mutate state, read revision contents, or add a migration. It permits
+diagnosing interrupted work without granting content reads or authorizing resume.
+
 Both SQLite and Durable Object independently own additive version 2 SQL for the
 restore session. They retain completed session metadata for retries. A failed
 page rolls back; interruption leaves earlier pages staged for the original

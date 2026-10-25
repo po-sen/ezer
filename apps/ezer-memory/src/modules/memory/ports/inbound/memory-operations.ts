@@ -10,7 +10,9 @@ import type { MemorySearchPage } from "./memory-search-page.ts";
 import type { MemoryExportQuery } from "./memory-export-query.ts";
 import type { MemoryExportPage } from "./memory-export-page.ts";
 import type { MemoryRestoreProgress } from "./memory-restore-progress.ts";
+import type { MemoryRestoreStatus } from "./memory-restore-status.ts";
 export interface MemoryOperations {
+  inspectRestore(): Promise<MemoryResult<MemoryRestoreStatus>>;
   restoreHistory(command: {
     readonly restoreId: string;
     readonly page: MemoryExportPage;

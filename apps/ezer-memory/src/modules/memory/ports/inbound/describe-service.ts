@@ -8,6 +8,7 @@ interface MemoryServiceDescription {
     readonly memorySearch: true;
     readonly memoryRecent: true;
     readonly memoryRestore: true;
+    readonly memoryRestoreStatus: true;
     readonly memoryExport: true;
   };
 }

@@ -38,7 +38,7 @@ pnpm --filter @ezer/memory test:hosts --host codex --restore-only
 ```
 
 `--restore-only` seeds synthetic source history through the SDK and runs only
-the model-driven restore scenario, including the same stored directives as the
+the model-driven interrupted-status and resume scenarios, including the same stored directives as the
 full suite. It does not count skipped regression scenarios as passes.
 
 These optional checks require installed, authenticated Codex/Claude Code CLIs and
@@ -60,11 +60,11 @@ fixture tools. No permission bypass is used. Host settings and managed policy ca
 still affect availability; these are acceptance checks on that host, not a clean-room
 claim about every installation.
 
-The eleven scenarios cover autonomous learning, recall after runtime restart,
+The twelve scenarios cover autonomous learning, recall after runtime restart,
 correction, recall of the corrected fact, another individual's isolation, an
 explicit storage opt-out, a fresh conversation after that opt-out, and recall with
 untrusted directives in memory bodies and source excerpts, complete history
-export, and complete history restore into an independent empty runtime. Recall
+export, read-only interrupted-restore status, and restore continuation into an independent runtime. Recall
 prompts deliberately omit the expected value. Evidence includes observed MCP
 calls, the model's answer, and backend results; saying a write succeeded is not
 sufficient. Each invocation has a two-minute timeout. The command reports bounded
@@ -112,12 +112,17 @@ independent full export, including older revisions and the seeded untrusted text
 Both individuals' memory snapshots must remain unchanged. This checks a small
 synthetic reply, not large-file export or every host's output limits.
 
-The restore scenario installs a third temporary package for an independent empty
-service with the same logical identity and an explicit restore grant. It supplies
-the previously exported synthetic archive, requires exact page submissions, and
-independently compares every restored revision after the model reports read-back
-verification. Calls to the original service or another Ezer, ordinary writes,
-and changed archive fields fail the check.
+The restore scenarios install a third temporary package for an independent empty
+service with the same logical identity and an explicit restore grant. The SDK
+submits the first original page with a random restore ID and restarts the runtime.
+A fresh native session receives no archive or restore ID, queries status, reports
+the ID, and leaves progress unchanged without attempting writes. Another fresh
+session receives the original complete archive and an explicit resume request,
+but no restore ID. It must query status before restoring, reuse that recovered ID,
+and replay every original page, including the accepted prefix. Independent SDK
+checks verify completed status and exact history after the model reports read-back
+verification. Calls to the source or another Ezer, ordinary writes, and changed
+archive fields fail the check. Focused runs do not rerun the other ten scenarios.
 
 The loopback gateway assigns a synthetic caller and signs its fixture credential.
 The actual Worker still validates the signature, grants, and identity through its
@@ -126,7 +131,28 @@ the native OAuth browser login flow. The gateway is test-only, accepts only `/mc
 and never listens on a public interface. It must not be deployed or used for real
 memory. Worker outbound requests are limited to the fixture's public JWKS.
 
-## Observed results (2026-10-23)
+## Observed results (2026-10-24)
+
+The complete local `pnpm run check` passed 184 tests: 3 packaging, 19 Node
+architecture/export/SQLite checks, 146 Worker tests, 13 PostgreSQL tests, and 3
+HTTPS acceptance tests, plus type, migration, formatting, and bundle checks.
+
+Codex CLI 0.163.0 on macOS passed the two focused native scenarios with
+`test:hosts --host codex --restore-only` (`notRun: 0`):
+
+| Scenario                   | Observed evidence                                                                                                                                                                                                                                                                |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Interrupted restore status | A new conversation called identity, service info, and `ezer_restore_status`; it reported the random ID omitted from its prompt. No write was attempted, progress remained at 1 of 4, and no other instance was contacted.                                                        |
+| Interrupted restore resume | A separate new conversation queried status before writing, recovered the original ID, replayed all 4 original pages, and made 4 export calls. Independent SDK checks confirmed completion and exact full-history equality; source and other-individual snapshots were unchanged. |
+
+The other ten native scenarios were not rerun in this focused check; their prior
+results remain below. Claude Code and Cloudflare deployment were skipped at the
+maintainer's request. Temporary test plugins, marketplaces, fixture directories,
+and the dedicated PostgreSQL container were removed and verified absent. The
+pre-existing PostgreSQL image was retained. These synthetic checks do not prove
+production recovery, remote login, or cross-computer continuity.
+
+### Previous results (2026-10-23)
 
 | Layer                  | Version                        | Result                                                                                             |
 | ---------------------- | ------------------------------ | -------------------------------------------------------------------------------------------------- |

@@ -47,6 +47,16 @@ interface ListingCursor extends Cursor {
 }
 // Logical individual routing and detached content, never a storage handle or native owner ID.
 export interface MemoryPersistence {
+  inspectRestore(individualId: string): Promise<
+    Result<{
+      readonly restore: {
+        readonly restoreId: string;
+        readonly snapshotSequence: number;
+        readonly restoredSequence: number;
+        readonly complete: boolean;
+      } | null;
+    }>
+  >;
   restoreHistory(
     individualId: string,
     command: {

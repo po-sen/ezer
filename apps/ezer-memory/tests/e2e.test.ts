@@ -75,6 +75,10 @@ test(
     );
     await freshSource.close();
     let restorer = await target.client("alpha");
+    const status = { name: "ezer_restore_status", arguments: {} };
+    assert.deepEqual((await restorer.callTool(status)).structuredContent, {
+      restore: null,
+    });
     const command = {
       name: "ezer_restore",
       arguments: { restoreId: "complete-recovery", page: first },
@@ -91,6 +95,14 @@ test(
     await restorer.close();
     await target.restart();
     restorer = await target.client("alpha");
+    assert.deepEqual((await restorer.callTool(status)).structuredContent, {
+      restore: {
+        restoreId: "complete-recovery",
+        snapshotSequence: 2,
+        restoredSequence: 1,
+        complete: false,
+      },
+    });
     assert.ok(!(await restorer.callTool(command)).isError);
     assert.ok(
       !(
@@ -110,6 +122,17 @@ test(
       assert.deepEqual(actual.structuredContent, expected);
     }
     const isolated = await target.client("beta");
+    assert.deepEqual((await isolated.callTool(status)).structuredContent, {
+      restore: null,
+    });
+    assert.deepEqual((await restorer.callTool(status)).structuredContent, {
+      restore: {
+        restoreId: "complete-recovery",
+        snapshotSequence: 2,
+        restoredSequence: 2,
+        complete: true,
+      },
+    });
     const denied = await isolated.callTool(command);
     assert.deepEqual(denied.content, [
       { type: "text", text: "IDENTITY_MISMATCH" },

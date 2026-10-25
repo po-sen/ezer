@@ -19,6 +19,10 @@ const command = {
 };
 function persistence() {
   return {
+    inspectRestore: vi.fn<MemoryPersistence["inspectRestore"]>(async () => ({
+      ok: true,
+      value: { restore: null },
+    })),
     restoreHistory: vi.fn<MemoryPersistence["restoreHistory"]>(async () => ({
       ok: false,
       code: "RESTORE_NOT_GRANTED",
@@ -47,6 +51,58 @@ function persistence() {
 }
 
 describe("Memory-owned operation grants", () => {
+  it("queries restore status with only the captured restore grant and projects metadata", async () => {
+    const gateway = persistence();
+    const connection = {
+      individualId: "alice",
+      capabilities: { read: false, write: false, restore: true },
+    };
+    const operations = createMemoryOperations(connection, gateway);
+    connection.individualId = "bob";
+    connection.capabilities.restore = false;
+    const progress = {
+      restoreId: "resume",
+      snapshotSequence: 4,
+      restoredSequence: 2,
+      complete: false,
+    };
+    const providerValue = { restore: { ...progress, privateOwner: "ignored" } };
+    gateway.inspectRestore.mockResolvedValue({
+      ok: true,
+      value: providerValue,
+    });
+    expect(await operations.inspectRestore()).toEqual({
+      ok: true,
+      value: { restore: progress },
+    });
+    expect(gateway.inspectRestore).toHaveBeenCalledWith("alice");
+    gateway.inspectRestore.mockClear();
+    expect(
+      await createMemoryOperations(
+        {
+          individualId: "alice",
+          capabilities: { read: true, write: true, restore: false },
+        },
+        gateway,
+      ).inspectRestore(),
+    ).toEqual({ ok: false, code: "RESTORE_NOT_GRANTED" });
+    expect(gateway.inspectRestore).not.toHaveBeenCalled();
+    expect(
+      await createMemoryOperations(
+        {
+          individualId: "../foreign",
+          capabilities: { read: false, write: false, restore: true },
+        },
+        gateway,
+      ).inspectRestore(),
+    ).toEqual({ ok: false, code: "INVALID_INPUT" });
+    expect(gateway.inspectRestore).not.toHaveBeenCalled();
+    gateway.inspectRestore.mockRejectedValue(new PersistenceFault());
+    expect(await operations.inspectRestore()).toEqual({
+      ok: false,
+      code: "UNAVAILABLE",
+    });
+  });
   it("detaches restore requests, rejects foreign identities before persistence, and preserves the captured grant", async () => {
     const gateway = persistence();
     const connection = {

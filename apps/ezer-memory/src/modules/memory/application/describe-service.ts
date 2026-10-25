@@ -14,6 +14,7 @@ export function createDescribeMemoryService(
         memorySearch: true,
         memoryRecent: true,
         memoryRestore: true,
+        memoryRestoreStatus: true,
         memoryExport: true,
       },
     }),

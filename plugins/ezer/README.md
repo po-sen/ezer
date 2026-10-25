@@ -191,3 +191,10 @@ ID, resumes identical pages after interruption, and verifies by exporting the
 restored snapshot. The same logical identity, empty target, and separate restore
 permission are required. Incomplete restoration blocks normal memory access
 until resumed; there is no cancel or overwrite operation.
+
+On servers advertising `memoryRestoreStatus`, `ezer_restore_status` reports
+restore metadata using the same independent grant. A fresh conversation can find
+the original ID and progress; a status-only request never resumes automatically.
+Explicit resume requires the original full archive and replays its pages to
+verify the accepted prefix before continuing. Null status does not mean empty
+memory. Older servers require the original ID retained outside the conversation.

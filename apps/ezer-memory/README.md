@@ -268,15 +268,16 @@ input schemas reject individual IDs, ownership selectors, and extra fields.
 The host obtains content scopes from the external authorization provider; the
 agent cannot request a grant by putting it in tool arguments.
 
-| Tool            | Input                                             | Required scope        | Result                                                                 |
-| --------------- | ------------------------------------------------- | --------------------- | ---------------------------------------------------------------------- |
-| `ezer_remember` | `operationId`, `memoryId`, `body`, `source`       | `ezer:memory:write`   | Immutable revision 1 and a write receipt.                              |
-| `ezer_read`     | `memoryId`, optional `revision`                   | `ezer:memory:read`    | Full content, source, correction reason, and revision metadata.        |
-| `ezer_revise`   | Write fields plus `expectedRevision` and `reason` | `ezer:memory:write`   | A new revision if the expected version is current.                     |
-| `ezer_list`     | Optional `order`, `limit`, and `cursor`           | `ezer:memory:read`    | Bounded previews with IDs, revisions, timestamps, and `nextCursor`.    |
-| `ezer_search`   | Literal `query`, optional `limit` and `cursor`    | `ezer:memory:read`    | Matching body previews at a fixed revision snapshot.                   |
-| `ezer_restore`  | `restoreId` and original export `page`            | `ezer:memory:restore` | Restore complete history into the same empty Ezer.                     |
-| `ezer_export`   | Optional `limit` and `cursor`                     | `ezer:memory:read`    | Versioned JSON pages of complete revision history at a fixed snapshot. |
+| Tool                  | Input                                             | Required scope        | Result                                                                               |
+| --------------------- | ------------------------------------------------- | --------------------- | ------------------------------------------------------------------------------------ |
+| `ezer_remember`       | `operationId`, `memoryId`, `body`, `source`       | `ezer:memory:write`   | Immutable revision 1 and a write receipt.                                            |
+| `ezer_read`           | `memoryId`, optional `revision`                   | `ezer:memory:read`    | Full content, source, correction reason, and revision metadata.                      |
+| `ezer_revise`         | Write fields plus `expectedRevision` and `reason` | `ezer:memory:write`   | A new revision if the expected version is current.                                   |
+| `ezer_list`           | Optional `order`, `limit`, and `cursor`           | `ezer:memory:read`    | Bounded previews with IDs, revisions, timestamps, and `nextCursor`.                  |
+| `ezer_search`         | Literal `query`, optional `limit` and `cursor`    | `ezer:memory:read`    | Matching body previews at a fixed revision snapshot.                                 |
+| `ezer_restore`        | `restoreId` and original export `page`            | `ezer:memory:restore` | Restore complete history into the same empty Ezer.                                   |
+| `ezer_restore_status` | Empty object                                      | `ezer:memory:restore` | Inspect the current Ezer's restoration metadata without reading contents or writing. |
+| `ezer_export`         | Optional `limit` and `cursor`                     | `ezer:memory:read`    | Versioned JSON pages of complete revision history at a fixed snapshot.               |
 
 Every request also requires `ezer:connect`. Read and write are independent: write
 permission does not grant reading, and connection permission grants neither.
@@ -406,6 +407,23 @@ Each page contains at most 10 full revisions. The HTTP body limit is 2 MiB to
 accommodate a maximum-size page even with JSON escaping; field bounds still apply.
 
 The response is `{ restoreId, snapshotSequence, restoredSequence, complete }`.
+When `memoryRestoreStatus` is advertised, `ezer_restore_status({})` returns
+`{ restore: null }` if no restore session exists, or `{ restore: { restoreId,
+snapshotSequence, restoredSequence, complete } }`. A null session does not imply
+empty memory. The query requires the independent restore grant, rejects all
+input fields, and returns no bodies, sources, or internal storage IDs. It reads
+session and sequence together in one Unit of Work without changing progress.
+It remains available while normal content access is blocked, including after
+restart. Completed progress stays capped at the restored snapshot after later
+writes. No new schema or migration is needed.
+
+A new conversation may use this status to recover the original restore ID.
+Resuming still requires an explicit request and the original complete archive;
+replay its pages from the beginning to verify the accepted prefix. Matching
+metadata alone cannot prove that an archive has matching contents. A status-only
+request does not authorize writes. Missing permissions, failed requests, and
+older servers without the capability must be reported without assuming absence.
+
 Each page commits revisions, sequence advancement, and restore progress in one
 synchronous Memory transaction. While pending, content reads/writes return
 `RESTORE_IN_PROGRESS` and identity reports published sequence 0. The final page
@@ -448,6 +466,7 @@ contract. Its methods return `{ ok: true, value }` or `{ ok: false, code }`:
 | `list({ order?, limit?, cursor? })`                                                         | List latest-at-snapshot previews in the selected change-sequence order in one Unit of Work.                                                                          |
 | `search({ query, limit?, cursor? })`                                                        | Search latest-at-snapshot body previews in one Unit of Work.                                                                                                         |
 | `restoreHistory({ restoreId, snapshotSequence, revisions, complete })`                      | Stage bounded history pages and publish only on completion.                                                                                                          |
+| `inspectRestore()`                                                                          | Read the existing restore metadata and its progress atomically, including pending sessions.                                                                          |
 | `exportHistory({ limit?, cursor? })`                                                        | Read every revision at a fixed snapshot in one Unit of Work.                                                                                                         |
 | `inspectState()`                                                                            | Read only the current change sequence for the bound object's identity metadata.                                                                                      |
 | `commit({ kind: "remember", operationId, memoryId, body, source })`                         | Create revision 1 of a new memory. Reusing a memory ID with a new operation returns `ALREADY_EXISTS`.                                                                |
