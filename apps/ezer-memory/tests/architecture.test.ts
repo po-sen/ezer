@@ -35,7 +35,15 @@ function violation(
     : dependency;
   const facades: Record<string, readonly string[]> = {
     "index.ts": ["entrypoints/worker"],
-    "modules/index.ts": ["modules/memory/index", "modules/access/index"],
+    "modules/index.ts": [
+      "modules/memory/index",
+      "modules/access/index",
+      "modules/workspace/index",
+    ],
+    "modules/workspace/index.ts": ["modules/workspace/ports/index"],
+    "modules/workspace/ports/index.ts": [
+      "modules/workspace/ports/inbound/index",
+    ],
     "modules/access/index.ts": ["modules/access/ports/index"],
     "modules/access/ports/index.ts": ["modules/access/ports/inbound/index"],
     "modules/memory/index.ts": ["modules/memory/ports/index"],
@@ -50,23 +58,34 @@ function violation(
       : "context facade must expose its declared public API";
   if (file.startsWith("entrypoints/")) {
     return /^bootstrap\/[^/]+$/.test(target) ||
-      ["cloudflare:workers", "node:util"].includes(target)
+      ["cloudflare:workers", "node:util", "node:url"].includes(target)
       ? undefined
       : "entrypoint must delegate to its corresponding bootstrap";
   }
   if (file.startsWith("bootstrap/")) {
     return dependency.startsWith(".") &&
-      (["modules/memory/", "modules/access/"].some((prefix) =>
-        target.startsWith(prefix),
+      (["modules/memory/", "modules/access/", "modules/workspace/"].some(
+        (prefix) => target.startsWith(prefix),
       ) ||
         target === "../package.json" ||
         target.startsWith("delivery/") ||
-        target.startsWith("configuration/"))
+        target.startsWith("configuration/") ||
+        target.startsWith("runtime/"))
       ? undefined
       : "unregistered bootstrap dependency";
   }
+  if (file.startsWith("runtime/"))
+    return target.startsWith("runtime/") ||
+      ["node:fs", "node:os", "node:path"].includes(dependency)
+      ? undefined
+      : "runtime lifecycle cannot import contexts";
   if (file.startsWith("delivery/"))
-    return target.startsWith("delivery/")
+    return target.startsWith("delivery/") ||
+      (file.startsWith("delivery/local/") &&
+        [
+          "@modelcontextprotocol/server",
+          "@modelcontextprotocol/server/stdio",
+        ].includes(dependency))
       ? undefined
       : "service routing must remain independent of context implementations";
   if (file.startsWith("configuration/"))
@@ -76,13 +95,25 @@ function violation(
   const layer = layerOf(file);
   const context = file.split("/")[1];
   if (
-    !["memory", "access"].includes(context ?? "") ||
+    !["memory", "access", "workspace"].includes(context ?? "") ||
     !Object.hasOwn(internalLayers, layer)
   )
     return "unregistered context or layer";
   if (!dependency.startsWith(".")) {
     const persistence = "modules/memory/infrastructure/persistence/";
     const externals: Record<string, readonly string[]> = {
+      "modules/workspace/infrastructure/create-workspace-fingerprint.ts": [
+        "node:crypto",
+      ],
+      "modules/workspace/infrastructure/persistence/sqlite/": [
+        "node:sqlite",
+        "node:fs",
+        "node:path",
+        "node:crypto",
+        "postgrator",
+      ],
+      "modules/workspace/delivery/": ["node:buffer"],
+      [`${persistence}sqlite/node/`]: ["node:sqlite"],
       "modules/access/infrastructure/jwt/": ["jose"],
       "modules/access/infrastructure/cloudflare-access/": ["jose"],
       "modules/access/infrastructure/cloudflare-oauth/": [
@@ -132,7 +163,9 @@ function violation(
   if (!target.startsWith(`modules/${context}/`)) {
     // Only the consumer-owned ACL may name the provider's explicit inbound API.
     if (
-      file.startsWith("modules/memory/infrastructure/acl/access/") &&
+      /^modules\/(?:memory|workspace)\/infrastructure\/acl\/access\//.test(
+        file,
+      ) &&
       (resolvedDeclaration
         ? target.startsWith("modules/access/ports/inbound/")
         : target === "modules/access/ports/inbound/index")
@@ -205,7 +238,9 @@ function importViolations(file: string, text: string): string[] {
     if (dependency !== undefined) {
       if (
         ts.isExportDeclaration(node) &&
-        file.startsWith("modules/memory/infrastructure/acl/access/") &&
+        /^modules\/(?:memory|workspace)\/infrastructure\/acl\/access\//.test(
+          file,
+        ) &&
         dependency.startsWith(".") &&
         relative(sourceRoot, resolve(sourceRoot, dirname(file), dependency))
           .split(sep)
@@ -390,6 +425,7 @@ function responsibilityViolations(file: string, text: string): string[] {
     "modules/memory/infrastructure/persistence/sqlite/",
   );
   const persistence =
+    file.startsWith("modules/workspace/infrastructure/persistence/sqlite/") ||
     sqlite ||
     file.startsWith(
       "modules/memory/infrastructure/persistence/durable-object/",
@@ -791,7 +827,9 @@ function provenanceViolations(program: ts.Program, path: string): string[] {
         if (!origin.startsWith(sourceRoot)) continue;
         if (
           ts.isExportDeclaration(node) &&
-          file.startsWith("modules/memory/infrastructure/acl/access/") &&
+          /^modules\/(?:memory|workspace)\/infrastructure\/acl\/access\//.test(
+            file,
+          ) &&
           relative(sourceRoot, origin)
             .split(sep)
             .join("/")
@@ -1044,7 +1082,7 @@ test("parent indexes cannot hide sibling adapters or reverse layer dependencies"
   }
 });
 
-test("only Memory's Access ACL may import Access's explicit inbound API", () => {
+test("only registered consumer ACLs may import Access's explicit inbound API", () => {
   const acl = "modules/memory/infrastructure/acl/access/adapter.ts";
   for (const [file, dependency] of [
     ["modules/memory/application/x.ts", "../../../access/index.ts"],
@@ -1103,6 +1141,45 @@ test("only Memory's Access ACL may import Access's explicit inbound API", () => 
     'export type * as Provider from "../../../../access/ports/inbound/index.ts";',
   ])
     assert(importViolations(acl, statement).length > 0);
+});
+
+test("Workspace and local runtime retain independent context and platform boundaries", () => {
+  const acl = "modules/workspace/infrastructure/acl/access/adapter.ts";
+  assert.equal(
+    violation(acl, "../../../../access/ports/inbound/index.ts"),
+    undefined,
+  );
+  for (const [file, dependency] of [
+    [acl, "../../../../access/index.ts"],
+    [acl, "../../../../memory/ports/inbound/index.ts"],
+    [
+      "modules/workspace/application/x.ts",
+      "../../memory/ports/inbound/index.ts",
+    ],
+    [
+      "modules/memory/application/x.ts",
+      "../../workspace/ports/inbound/index.ts",
+    ],
+    [
+      "modules/access/application/x.ts",
+      "../../workspace/ports/inbound/index.ts",
+    ],
+    ["modules/workspace/domain/x.ts", "node:sqlite"],
+    ["modules/workspace/ports/inbound/x.ts", "node:buffer"],
+    [
+      "modules/workspace/infrastructure/persistence/sqlite/x.ts",
+      "../../../acl/access/index.ts",
+    ],
+    ["runtime/x.ts", "../modules/workspace/application/index.ts"],
+    ["delivery/local/x.ts", "../../modules/workspace/application/index.ts"],
+  ])
+    assert(violation(file!, dependency!), `${file}: ${dependency}`);
+  assert(
+    importViolations(
+      acl,
+      'export type { AccessControl } from "../../../../access/ports/inbound/index.ts";',
+    ).length > 0,
+  );
 });
 
 test("barrels cannot conceal foreign contracts or implementations at the ACL boundary", () => {

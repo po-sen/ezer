@@ -1,30 +1,90 @@
 # Ezer memory service
 
-This package implements Ezer's independent memory service in TypeScript on
-Cloudflare Workers. The MCP endpoint requires an authorized connection.
+This package implements Ezer's independent memory service in TypeScript, with
+Node stdio for local use and Cloudflare Workers for hosted use. The hosted MCP endpoint requires an authorized connection.
 An internal SQLite-backed Durable Object stores sourced text memories and their
 revision history. Cloudflare Access browser login, library-managed OAuth grants,
 external JWT validation, Ezer identity binding and scoped MCP tools are implemented.
 Cloud resources, Access application provisioning, model invocation and deployment
 remain operator responsibilities. See the [Cloudflare login guide](AUTHORIZATION.md).
 
+## Local memory and file workspace
+
+Use [plugin packaging](../../plugins/ezer/README.md) with `--local --individual`
+for an installable server. To build and launch the same server directly:
+
+```sh
+pnpm --filter @ezer/memory build:local
+node apps/ezer-memory/dist/local/entrypoints/local.mjs --individual personal
+```
+
+This is an MCP stdio process, not a listening HTTP server or an interactive shell.
+Let a host MCP client launch it and connect its stdin/stdout. Protocol messages
+alone go to stdout; bounded diagnostics go to stderr. Node.js 24.5+ is required.
+The bundle includes its runtime dependencies and migration files; pnpm and the
+source checkout are unnecessary after packaging. No Cloudflare dependencies enter
+the local bundle, and the Worker bundle excludes Node adapters and Workspace.
+
+Data defaults to `~/.ezer/individuals/<individual>/`. An optional `--data-dir`
+selects a canonical absolute private root. Local files and path ancestors must
+not be symlinks; database hardlinks are rejected. On POSIX, the root, individual
+directory and database files must belong to the current user with no group/other
+permissions. Windows ACL enforcement has not been verified. The launch ID is
+validated, authorized through Access and pinned in each database. Tool arguments
+cannot select another identity or host path. The same root/ID can be shared by
+multiple local agents; different IDs use separate stores. There is no local
+cross-computer synchronization or network authentication endpoint.
+
+The existing Memory use cases and SQLite Stores serve all memory tools. A
+separate [Workspace context](src/modules/workspace/README.md) owns files, versions,
+trash, retry receipts and its own `workspace.sqlite`; Memory owns `memory.sqlite`.
+The contexts have independent migrations, transactions and Access ACLs. Local
+startup runs each adapter's forward migrations before serving. Interrupted memory
+restoration does not block Workspace. `--allow-restore` enables the separate
+memory restore grant, off by default; an explicit restore request is still needed.
+
+| Local tool                                               | Behavior                                                                      |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `ezer_workspace_info`                                    | Bound individual, file permissions and limits.                                |
+| `ezer_file_write`, `ezer_file_read`                      | UTF-8 notes or base64 attachments; immutable versions and bounded byte reads. |
+| `ezer_file_list`, `ezer_file_history`                    | Snapshot metadata pages or version history.                                   |
+| `ezer_file_move`, `ezer_file_trash`, `ezer_file_restore` | Versioned moves, reversible removal and historical recovery.                  |
+
+Paths are logical, case-sensitive relative names; directories are implicit.
+They are not files mounted into the host filesystem. Files are limited to 1 MiB,
+reads to 64 KiB, and metadata pages to 50 entries. Mutations require a stable
+operation ID and expected version. SQLite atomically commits bytes, metadata,
+sequence and retry receipt. Conflicts require a fresh read, and identical retries
+return the original result. No permanent deletion, automatic cleanup or quota
+eviction is provided; history consumes disk space.
+
+Plugin upgrades/uninstall do not delete data. Memory exports exclude Workspace.
+For a cold backup stop **all** processes using the individual, then copy its entire
+directory. Live copying, network shares and cloud-sync folders are unsupported.
+Version history does not protect against disk loss, and OS-owner access is not a
+sandbox against other processes running as that user.
+
 ## Development
 
 From the repository root, use the pinned pnpm version and run
 `pnpm install --frozen-lockfile`, then:
 
-| Command                                       | Purpose                                                           |
-| --------------------------------------------- | ----------------------------------------------------------------- |
-| `pnpm --filter @ezer/memory dev`              | Start Wrangler locally on loopback.                               |
-| `pnpm --filter @ezer/memory types`            | Regenerate Worker bindings, entry-point, and runtime types.       |
-| `pnpm --filter @ezer/memory types:check`      | Check that committed generated types are current.                 |
-| `pnpm --filter @ezer/memory typecheck`        | Regenerate types, then check source and tests.                    |
-| `pnpm --filter @ezer/memory test`             | Run architecture, Node SQLite CLI, and workerd tests.             |
-| `pnpm --filter @ezer/memory test:e2e`         | Build and test packaged HTTPS connections and durable recovery.   |
-| `pnpm --filter @ezer/memory test:hosts`       | Opt-in native Codex/Claude model acceptance; requires host login. |
-| `pnpm --filter @ezer/memory migrations:check` | Check SQL pairs, checksums, and generated bundle.                 |
-| `pnpm --filter @ezer/memory build`            | Produce a local bundle using `wrangler deploy --dry-run`.         |
-| `pnpm run check`                              | Run the repository's full CI validation.                          |
+| Command                                                                                    | Purpose                                                           |
+| ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------- |
+| `pnpm --filter @ezer/memory dev`                                                           | Start Wrangler locally on loopback.                               |
+| `pnpm --filter @ezer/memory types`                                                         | Regenerate Worker bindings, entry-point, and runtime types.       |
+| `pnpm --filter @ezer/memory types:check`                                                   | Check that committed generated types are current.                 |
+| `pnpm --filter @ezer/memory typecheck`                                                     | Regenerate types, then check source and tests.                    |
+| `pnpm --filter @ezer/memory test`                                                          | Run architecture, Node SQLite CLI, and workerd tests.             |
+| `pnpm --filter @ezer/memory test:e2e`                                                      | Build and test packaged HTTPS connections and durable recovery.   |
+| `pnpm --filter @ezer/memory test:hosts`                                                    | Opt-in native Codex/Claude model acceptance; requires host login. |
+| `pnpm --filter @ezer/memory migrations:check`                                              | Check SQL pairs, checksums, and generated bundle.                 |
+| `pnpm --filter @ezer/memory build`                                                         | Produce a local bundle using `wrangler deploy --dry-run`.         |
+| `pnpm --filter @ezer/memory build:local`                                                   | Bundle the standalone Node stdio server and migrations.           |
+| `pnpm --filter @ezer/memory test:local`                                                    | Test SQLite, Workspace, stdio and relocated plugin packages.      |
+| `pnpm --filter @ezer/memory test:local:host`                                               | Opt-in native Codex local plugin acceptance with synthetic data.  |
+| `pnpm --filter @ezer/memory migrate:workspace status --database /path/to/workspace.sqlite` | Inspect Workspace's independent migration history.                |
+| `pnpm run check`                                                                           | Run the repository's full CI validation.                          |
 
 No Cloudflare login or project secrets are needed for the deterministic checks.
 Native host checks require the host's existing login and consume model usage;
@@ -48,7 +108,7 @@ configuration; a real deployment requires a separate, authorized setup.
 - `GET /.well-known/oauth-protected-resource/mcp` publishes the configured OAuth
   resource, issuer, and supported connection/read/write/restore scopes without authentication.
 
-Every MCP request is authenticated before protocol/body parsing. Protocol sessions
+Every HTTP MCP request is authenticated before protocol/body parsing. Protocol sessions
 never determine durable identity. Identity lookup reads only the authorized object's
 sequence. Content tools enforce read/write/restore grants before invoking persistence.
 CI uses synthetic MCP clients. Native plugin behavior is checked separately through
@@ -57,18 +117,19 @@ the opt-in acceptance runner; neither establishes real deployment login.
 ## Authorization and stable identity
 
 The Access bounded context validates a principal and resolves a server-owned Ezer
-binding. Memory's consumer-owned ACL is the only cross-context adapter and imports
-Access's explicit `ports/inbound/index.ts`. It implements Memory's outbound access
-gateway, translating provider results into Memory-owned contracts. HTTP/MCP delivery
-uses Memory's own inbound connection use case and never imports Access types.
-This is a one-way dependency from Memory to Access, with request/response mapping
-inside the ACL. Access owns neither memory SQL nor transactions.
+binding. Memory and Workspace have independent consumer-owned ACLs that import
+Access's explicit `ports/inbound/index.ts`. Each implements its consumer's outbound access
+gateway, translating provider results into context-owned contracts. HTTP/MCP delivery
+uses its own context's inbound connection use case and never imports Access types.
+Each dependency points from the consumer to Access, with request/response mapping
+inside its ACL. Access owns neither memory/workspace SQL nor their transactions.
 Its configuration, JWT, Cloudflare Access and Cloudflare OAuth adapters are independent.
 The official Cloudflare library owns OAuth protocol and KV storage; no custom token
 protocol or account database is introduced.
 
 Context contracts use their own language. Access accepts opaque credentials and
-works with verified callers, `connect`, `read-memory`, and `write-memory` permissions,
+works with verified callers, `connect`, `read-memory`, `write-memory`, `restore-memory`,
+`read-workspace` and `write-workspace` permissions,
 and individual assignments.
 Memory works with individual connection grants and its own denial codes. JWT/JWKS
 settings, OAuth claims, discovery metadata, and protocol error names are confined
@@ -575,13 +636,15 @@ and [Durable Object tests](https://developers.cloudflare.com/durable-objects/exa
 ## Operational migration commands
 
 These Node commands are maintenance entrypoints, not part of the Worker bundle.
-They operate only on the memory context; other contexts must own separate files
+Each operates on its owning context; contexts own separate files
 (SQLite) or schemas and migration ledgers (PostgreSQL). They never select a backend
 for the running Worker, which still uses Durable Objects.
 
 ```sh
 pnpm --filter @ezer/memory migrate:sqlite status --database /path/to/memory.sqlite
 pnpm --filter @ezer/memory migrate:sqlite up --database /path/to/memory.sqlite
+pnpm --filter @ezer/memory migrate:workspace status --database /path/to/workspace.sqlite
+pnpm --filter @ezer/memory migrate:workspace up --database /path/to/workspace.sqlite
 pnpm --filter @ezer/memory migrate:postgresql status --database ezer --host db.example --user ezer_migrator
 pnpm --filter @ezer/memory migrate:postgresql up --database ezer --host db.example --user ezer_migrator
 ```

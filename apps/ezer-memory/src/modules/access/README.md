@@ -11,21 +11,21 @@ individual's personality or store its memories.
 
 - Obtain verified caller facts through an implementation-independent credential port.
 - Require connection permission and exactly one assignment for the caller.
-- Return the authorized logical individual ID and explicit memory capabilities without exposing credentials or
-  provider-specific claims to Memory.
+- Return the authorized logical individual ID and explicit memory/workspace capabilities without exposing credentials or
+  provider-specific claims to consumers.
 - Reject ambiguous assignments and recheck current assignment policy for each request.
 - Fail closed when policy is missing or invalid, and report bounded failure codes
   without leaking provider errors.
 
 ## Core concepts and owned data
 
-| Concept    | Meaning and ownership                                                                                        |
-| ---------- | ------------------------------------------------------------------------------------------------------------ |
-| Credential | Opaque proof submitted by a caller. The application does not parse its format.                               |
-| Caller     | An identity established by the selected verifier. Its `callerId` is distinct from the Ezer individual ID.    |
-| Permission | Access owns `connect`, `read-memory`, `write-memory`, and `restore-memory`. None implies any of the others.  |
-| Assignment | A server-owned mapping from one caller to one individual. Multiple callers may share the same individual.    |
-| Decision   | A granted individual or a bounded denial/unavailability result, independent of HTTP status and OAuth errors. |
+| Concept    | Meaning and ownership                                                                                                                   |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Credential | Opaque proof submitted by a caller. The application does not parse its format.                                                          |
+| Caller     | An identity established by the selected verifier. Its `callerId` is distinct from the Ezer individual ID.                               |
+| Permission | Access owns `connect`, `read-memory`, `write-memory`, `restore-memory`, `read-workspace` and `write-workspace`. None implies any other. |
+| Assignment | A server-owned mapping from one caller to one individual. Multiple callers may share the same individual.                               |
+| Decision   | A granted individual or a bounded denial/unavailability result, independent of HTTP status and OAuth errors.                            |
 
 Access owns interpretation of assignment policy and consented client grants. Its
 Cloudflare OAuth adapter uses the official library's KV records for registrations,
@@ -43,21 +43,21 @@ exposes these contracts, but is not an allowed cross-context import path:
 - `AccessControl.authorize(credential)` returns the authorized logical individual or
   `UNRECOGNIZED_CREDENTIAL`, `UNASSIGNED_CALLER`, `MISSING_PERMISSION`, or `UNAVAILABLE`.
 - `AuthorizedIndividual` carries `callerId`, `individualId` and `readMemory`/`writeMemory`/`restoreMemory`
-  capabilities across the context boundary. No provider claims are exported.
+  capabilities, plus optional `readWorkspace`/`writeWorkspace`, across the context boundary. Absent workspace grants mean denied. No provider claims are exported.
 
 Access HTTP delivery also consumes the inbound authorization contract to identify
 the consenting caller. The caller ID is not copied into Memory. Across contexts,
-only [Memory](../memory/README.md)'s consumer-owned
-[Access ACL](../memory/infrastructure/acl/access/index.ts) consumes these contracts.
-That adapter implements Memory's own outbound port, translating authorized
-identities and Access decisions into Memory-owned results. Access makes
-the authorization decision; the ACL does not repeat that policy. Memory delivery
-uses its own connection use case and never imports Access types.
+only [Memory](../memory/README.md)'s and [Workspace](../workspace/README.md)'s
+consumer-owned `infrastructure/acl/access/` adapters consume these contracts.
+Each implements its own context's outbound port, translating identities and Access
+decisions into consumer-owned results. Access makes the authorization decision;
+the ACL does not repeat that policy. Context delivery uses its own connection
+use case and never imports Access types.
 
-The dependency is one-way: Memory's ACL depends on Access's inbound API. Translating
+Dependencies are one-way: each consumer ACL depends on Access's inbound API. Translating
 both requests and responses does not create a reverse dependency. Access does not
-import Memory, reuse its ACL, open its database, or select a Durable Object. There
-is no shared transaction. Bootstrap composes the two contexts through the adapter.
+import either consumer, reuse its ACL, open its database, or select a Durable Object. There
+is no shared transaction. Bootstrap composes the contexts through their adapters.
 
 Bootstrap composes the use case with `AccessPolicyReader` and `CredentialVerifier`
 outbound ports. Policy contains only caller assignments. Verification accepts
@@ -70,6 +70,14 @@ independent infrastructure branches. There is no separate domain layer until
 domain models need responsibilities beyond this access policy use case.
 
 ## Adapter translations
+
+The `local-process` adapter trusts the OS owner's private stdio launch, accepts
+only absent proof and restricts authorization to the operator-selected individual.
+It grants memory/workspace read/write and optionally memory restore. It is wired
+only in the Node composition, never to HTTP. The Worker bundle excludes it.
+Local launch settings are not tool input, and a changed assignment cannot retarget
+the granted identity. JWT and hosted OAuth do not currently issue workspace grants
+or expose Workspace tools. No new OAuth scope or cloud permission is introduced.
 
 The service's [deployment configuration](../../configuration/index.ts) validates
 the explicit `EZER_AUTHORIZATION` binding before bootstrap composes adapters.

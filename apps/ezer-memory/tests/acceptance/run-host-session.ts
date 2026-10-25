@@ -11,7 +11,7 @@ export async function runHostSession(input: {
   instances: readonly Instance[];
   active: Instance;
   workspace: string;
-  caFile: string;
+  caFile?: string;
   prompt: string;
 }) {
   const { host, instances, active } = input;
@@ -84,9 +84,13 @@ export async function runHostSession(input: {
       cwd: input.workspace,
       env: {
         ...process.env,
-        CODEX_CA_CERTIFICATE: input.caFile,
-        NODE_EXTRA_CA_CERTS: input.caFile,
-        SSL_CERT_FILE: input.caFile,
+        ...(input.caFile
+          ? {
+              CODEX_CA_CERTIFICATE: input.caFile,
+              NODE_EXTRA_CA_CERTS: input.caFile,
+              SSL_CERT_FILE: input.caFile,
+            }
+          : {}),
       },
       stdio: ["ignore", "pipe", "pipe"],
       detached: process.platform !== "win32",
@@ -138,6 +142,7 @@ export async function runHostSession(input: {
           ? "host-failed"
           : null;
   let answer = "";
+  const usedTools: string[] = [];
   if (!reason) {
     if (host === "claude") {
       try {
@@ -152,6 +157,12 @@ export async function runHostSession(input: {
           const event = JSON.parse(line);
           if (
             event.type === "item.completed" &&
+            event.item?.type === "mcp_tool_call" &&
+            typeof event.item.tool === "string"
+          )
+            usedTools.push(event.item.tool);
+          if (
+            event.type === "item.completed" &&
             event.item?.type === "agent_message"
           )
             answer = event.item.text;
@@ -161,5 +172,5 @@ export async function runHostSession(input: {
       }
     }
   }
-  return { reason, answer };
+  return { reason, answer, usedTools };
 }

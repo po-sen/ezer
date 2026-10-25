@@ -162,8 +162,9 @@ code rejects the newer schema. Resume with restore-aware code.
 Memory does not choose what the agent remembers, define personality, infer
 emotions, or provide semantic search. Caller authentication and subject bindings
 belong to Access. Memory does not issue credentials, own another context's data,
-or coordinate cross-context transactions. Semantic retrieval and standalone SQLite/PostgreSQL serving deployments remain
-future work. Startup recovery is orchestrated by the plugin, not this context.
+or coordinate cross-context transactions. Workspace independently owns files and
+does not participate in memory exports or restores. Semantic retrieval and
+PostgreSQL serving remain future work. Startup recovery is orchestrated by the plugin, not this context.
 
 ## Architecture correspondence
 
@@ -218,16 +219,21 @@ Migration packaging checks all histories separately and never synchronizes them.
 The initial SQL bytes are identical to preserve the existing Durable Object data
 format and ledger, but each adapter can evolve its own history independently.
 
-The Worker selects Durable Object. SQLite has a Node SQLite migration CLI alongside
-its runtime-independent Stores. PostgreSQL has its own schema migration CLI. Neither
-backend yet has a standalone memory-serving deployment. The SQLite component test uses a disposable
+The Worker selects Durable Object. Local Node stdio uses the same Memory use cases
+with `sqlite/node/` and its runtime-independent Stores. Bootstrap composes the
+independent `sqlite/cli/` migration runner before initializing the pinned identity;
+Node runtime and CLI adapters do not import each other. PostgreSQL has a migration
+CLI but no serving adapter. The SQLite component test uses a disposable
 database and a test-only session, not the production Durable Object adapter.
 Public module APIs live in pure `index.ts` barrels containing explicit re-exports
 only. Implementations stay in named files. Cross-directory source imports
 use those APIs; same-directory implementations reference each other directly. Indexes
 do not permit reversed layer dependencies or access to sibling infrastructure through
 a parent facade. SQLite keeps its Node migration operations in `sqlite/cli/`, separate
-from the portable Store index.
+from both `sqlite/node/` and the portable Store index. The local Unit of Work uses
+`BEGIN IMMEDIATE`, full synchronous durability and a bounded writer timeout;
+provider failures, callback expiry and synchronous semantics match the existing
+Memory contracts. Local process restarts retain revisions and restore progress.
 
 Entrypoints own platform lifecycle and CLI dispatch; bootstrap composes implementations;
 delivery owns RPC validation and delegation to inbound ports.
@@ -318,7 +324,7 @@ the next continuous pair and a data-preserving upgrade test.
 
 Local evidence covers domain/application behavior, SQLite constraints and failure
 rollback, migration lifecycle, individual isolation, concurrent writers, retry
-receipts, and recovery after object eviction. It does not establish production
+receipts, and recovery after object eviction or Node process restart. It does not establish production
 backup/restore, Cloudflare deployment, cross-computer continuity, or native agent
 installation. SQLite/PostgreSQL operational commands expose `status` and `up`; no automatic
 downgrade or recovery command is exposed. See the [service README](../../../README.md)

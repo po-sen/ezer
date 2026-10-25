@@ -61,6 +61,15 @@ cursors, and pending writes; explain the mismatch before continuing. A smaller
 change sequence than previously observed may indicate a restored or different
 backend: re-establish continuity rather than assuming nothing changed.
 
+## Use files when available
+
+When the packaged connection provides a managed workspace, read
+[workspace operations](references/workspace.md) before using it. Verify the
+workspace's individual and recover relevant file metadata and contents as needed.
+Choose your own organization for notes, authorized attachments and outputs.
+The same storage preferences and trust boundaries apply to memories and files.
+Memory export/restore does not include workspace files.
+
 ## Learn during the conversation
 
 Decide which experiences, preferences, decisions, corrections, or self-reflections

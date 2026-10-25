@@ -10,6 +10,9 @@
     "src/entrypoints/migrate-*.ts",
     "scripts/**/*.ts",
     "tests/migration-cli.test.ts",
-    "tests/postgresql-migrations.test.ts"
+    "tests/postgresql-migrations.test.ts",
+    "src/entrypoints/local.ts",
+    "tests/local-*.test.ts",
+    "tests/workspace.test.ts"
   ]
 }

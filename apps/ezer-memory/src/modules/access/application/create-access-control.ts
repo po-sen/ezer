@@ -40,6 +40,12 @@ export function createAccessControl(
               readMemory: caller.permissions.includes("read-memory"),
               writeMemory: caller.permissions.includes("write-memory"),
               restoreMemory: caller.permissions.includes("restore-memory"),
+              ...(caller.permissions.includes("read-workspace")
+                ? { readWorkspace: true }
+                : {}),
+              ...(caller.permissions.includes("write-workspace")
+                ? { writeWorkspace: true }
+                : {}),
             },
           },
         };

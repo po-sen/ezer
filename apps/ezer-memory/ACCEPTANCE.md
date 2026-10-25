@@ -1,8 +1,48 @@
 # Local acceptance
 
-These checks exercise the built TypeScript Worker and generated plugin packages.
+These checks exercise the built TypeScript Worker, local Node server and generated plugin packages.
 They do not use the local Python prototype, Cloudflare resources, real memories,
 or deployment credentials.
+
+## Local stdio and Workspace checks
+
+```sh
+pnpm --filter @ezer/memory test:local
+pnpm --filter @ezer/memory test:local:host
+```
+
+`test:local` runs in CI without a model. It builds a standalone Node server and
+tests real stdio clients, separate individual databases, sourced memories,
+restart recovery, complete memory restoration after interruption, binary files,
+versions, moves, trash, restore, fixed snapshot pages, exact retries and concurrent
+process conflicts. It also verifies migration status/rollback/corruption checks,
+permissions and path rejection, and forced process termination before a file
+transaction commits. Relocated packages run without source or node_modules, and
+replacement packages preserve data outside their install directory. All data is
+synthetic and stored in task-owned temporary directories removed after testing.
+
+`test:local:host` uses the existing Codex login opaquely and consumes model usage.
+It inventories local marketplace registrations, packages and installs a uniquely
+named plugin, then starts fresh Codex sessions to write a sourced memory/note,
+recover both without the expected value in the recall prompt, and update/trash/
+restore the note. It requires actual MCP tool evidence and independently checks
+persisted bytes, revisions and unchanged memory during file recovery. Hook execution
+is disabled and shell access is read-only. Cleanup removes the test plugin and
+marketplace and verifies their absence. Raw transcripts are not saved or printed.
+Existing marketplace/plugin settings are not reset. Claude Code, Windows native
+installation, Cloudflare deployment and cross-computer synchronization are outside
+this local check; deterministic manifest checks are not native acceptance.
+
+### Local stdio observation: 2026-10-25
+
+Codex CLI 0.163.0 on macOS with Node.js 26.12.0 passed all three native local
+scenarios. The installed package used its bundled stdio server. Tool events and
+independent SDK read-back confirmed sourced memory creation, exact note bytes,
+fresh-session recovery, and write/trash/restore resulting in four retained file
+versions. Memory's sequence stayed unchanged during file recovery. The temporary
+plugin, marketplace and synthetic data were removed, with registration cleanup
+verified. This observation does not establish behavior across all models or hosts.
+Claude Code and Cloudflare deployment were intentionally not run.
 
 ## Deterministic transport and persistence check
 

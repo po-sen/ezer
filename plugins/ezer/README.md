@@ -3,24 +3,50 @@
 This directory is the shared source for Ezer instance packages. Package it before
 installation; do not install this source directory or a local Python prototype.
 An instance package includes the same skill, its own installation/server name,
-one explicit memory endpoint, and native Codex and Claude Code manifests.
+one explicit local identity or remote memory endpoint, and native Codex and Claude Code manifests.
 
 ## Prerequisites
 
-An operator must provide a reachable HTTPS `ezer-memory` endpoint ending in
+For **local mode**, the operator builds with Node.js 24.5+ and the repository's
+pinned pnpm dependencies. The installed plugin requires Node.js 24.5+ on PATH;
+its server and runtime dependencies are bundled. No account, OAuth, Cloudflare,
+listening port or separate database server is needed. macOS and Linux are the
+tested targets; Windows native installation has not been verified.
+
+For **remote mode**, an operator must provide a reachable HTTPS `ezer-memory` endpoint ending in
 `/mcp` and configure [Cloudflare Access login](../../apps/ezer-memory/AUTHORIZATION.md)
 or an external OAuth authority, with caller-to-individual
 assignment. See the [service README](../../apps/ezer-memory/README.md).
 The plugin does not deploy a service, provision a login provider, or grant access.
 The default service configuration denies connections.
 
-The operator packages with Node.js 24 or later; installed plugins need no Node,
+The operator packages with Node.js 24.5 or later; installed remote plugins need no Node,
 Python, pnpm, local database, or MCP proxy. Their host must support skills and
 remote Streamable HTTP MCP with the deployment's OAuth flow.
 
 ## Package an instance
 
-From this repository, replace the example URL with the operator's public
+To keep a local Ezer on the machine running the agent:
+
+```sh
+pnpm plugin:package --name ezer-personal --local --individual personal --out dist/ezer-personal
+```
+
+Data defaults to `~/.ezer/individuals/<individual>/`. `--data-dir` selects a
+canonical absolute private root outside the package, on the agent's machine.
+The individual is a stable 1–64 character ID using ASCII letters, digits, `_`
+and `-`, starting with a letter or digit. The plugin name is just a label.
+Keep both the individual and root unchanged across upgrades. Do not put data in
+a plugin cache, network share or cloud-sync folder. Restore permission defaults
+off; add `--allow-restore` only for instances that should permit explicit memory
+recovery into an empty database. It does not automatically start a restore.
+
+The bundled stdio process is started and stopped by the host. Launch settings
+are operator configuration, not agent-selectable tool arguments. Its two private
+SQLite files retain memory and workspace independently. No host settings, hooks
+or global instructions are added by the package.
+
+For remote mode, replace the example URL with the operator's public
 resource URL, never a login URL, token, or URL containing credentials:
 
 ```sh
@@ -55,8 +81,10 @@ ezer-personal/
       references/writing-memories.md
 ```
 
-The packager reads only the shared manifest, skill, and writing reference. It
-generates connection metadata and both marketplace formats without copying other
+The packager reads an explicit allowlist of shared metadata, skill and references.
+Local packages additionally contain `server/` with the Node bundle, source map,
+dependency licenses and independently owned migration files, plus a Codex stdio
+overlay. It never copies databases, node_modules, prototype files or arbitrary
 worktree files. No secret inputs are supported. Keep generated packages out of
 Git; the public endpoint may still reveal deployment names.
 
@@ -81,8 +109,8 @@ claude plugin marketplace add /absolute/path/to/ezer-personal
 claude plugin install ezer-personal@ezer-personal-local
 ```
 
-Restart the host session, authenticate the instance's MCP connection using the
-host's native OAuth flow, and explicitly select the installed skill. In Codex,
+Restart the host session and explicitly select the installed skill. Remote
+instances also authenticate the MCP connection through the host's native OAuth flow. In Codex,
 mention `ezer-personal` using the skill picker; in Claude Code, use
 `/ezer-personal:ezer-personal`. A first prompt can be:
 
@@ -96,24 +124,44 @@ full workflow; having connection permission alone is insufficient.
 
 Keep the generated marketplace directory available for host refreshes. To
 upgrade, package the new source into a new directory using the same name and
-endpoint, then use the host's marketplace/remove/install controls to replace
+endpoint (or local individual and data root), then use the host's marketplace/remove/install controls to replace
 the old registration. Do not repoint a live name to a different Ezer silently.
-Removing a plugin does not delete the server's memory.
+Removing a plugin does not delete its separately stored memory or workspace.
 
 ## Several independent Ezers
 
 Package again with a distinct name, such as `ezer-work`, and that individual's
-endpoint. Each package has distinct marketplace, plugin, skill, and MCP server
+endpoint, or `--local --individual work`. Each package has distinct marketplace, plugin, skill, and MCP server
 names. The skill binds to its packaged server rather than matching a tool suffix.
 Different names alone do not isolate memory: two connections authorized to the
 same individual in the same backend share its records. Isolation is enforced
 by the backend's authorized assignment.
 
-For another computer to continue the same Ezer, install the same package and
+Two agents on one computer can share the same local individual/data root, including
+across projects. Concurrent changes require matching current versions; conflicting
+writes fail instead of silently overwriting one another. For another computer to
+continue the same Ezer through remote mode, install the same package and
 authenticate a caller assigned to the same individual in the same deployment.
 Do not infer identity equivalence from labels or an ID returned by another
 deployment. Keep different individuals in separate conversations where possible;
 skills cannot enforce isolation inside a model's shared context.
+
+## Local file workspace
+
+The local server adds `ezer_workspace_info` and `ezer_file_write`, `ezer_file_read`,
+`ezer_file_list`, `ezer_file_history`, `ezer_file_move`, `ezer_file_trash`, and
+`ezer_file_restore`. The agent chooses its directory organization and content.
+Paths are logical MCP names, not mounted host paths. Files support UTF-8 text or
+base64 binary attachments up to 1 MiB; reads are bounded to 64 KiB. Versions and
+trash are retained with no automatic purge. Restoring creates a new version.
+See the [workspace instructions](skills/ezer/references/workspace.md).
+
+Memory exports/restores contain no workspace files. For a cold backup, stop all
+processes using the individual and copy its entire directory; live copying is
+unsupported. Old versions consume disk, and history is not a backup against disk
+loss. This is same-OS-user storage, not a sandbox against other processes owned
+by that user. Local installation on another computer creates independent data;
+it does not synchronize it.
 
 ## Behavior and acceptance
 
@@ -142,7 +190,7 @@ every conversation, background reflection, consciousness, or identical behavior
 across models. Explicit activation is the alpha acceptance path. The plugin
 does not add hooks or alter the host's global instructions.
 
-After deploying and configuring real login, verify with synthetic information:
+After local installation, or remote deployment and login setup, verify with synthetic information:
 
 1. In host A, activate the skill and confirm the intended identity. State a
    preference and verify a sourced write receipt.
@@ -166,8 +214,8 @@ The repository's [local acceptance runner](../../apps/ezer-memory/ACCEPTANCE.md)
 exercises generated packages with isolated synthetic services, and can run real
 Codex/Claude Code sessions separately from CI.
 Local package and backend tests do not establish remote login or cross-computer
-continuity. Physical deletion, cross-identity import, verified production disaster-recovery backup, semantic search, and attachments are not
-provided by this plugin.
+continuity. Physical deletion, cross-identity import, verified production disaster-recovery backup and semantic search are not
+provided. Attachments are available only through the bounded local Workspace.
 
 ## Packaging rationale
 
@@ -179,7 +227,10 @@ and [Claude marketplace reference](https://code.claude.com/docs/en/plugins/marke
 OpenAI does not expand Claude's
 [`userConfig` installation variables](https://developers.openai.com/plugins/guides/submit-claude-plugin#replace-claude-userconfig).
 Generating ordinary manifests from non-secret instance settings keeps one skill
-implementation and preserves native HTTP/OAuth, without a host-specific proxy.
+implementation and preserves native HTTP/OAuth or stdio. The local manifests use
+the documented [Codex `${PLUGIN_ROOT}`](https://developers.openai.com/plugins/deploy/desktop-only)
+and Claude `${CLAUDE_PLUGIN_ROOT}` path expansion, with persistent data outside
+installation directories. No host-specific proxy or custom secret format is used.
 
 This is a repository-distributed alpha, not an OpenAI or Anthropic public-directory
 submission. Publishing a listing and verifying real-provider compatibility are
