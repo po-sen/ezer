@@ -7,9 +7,11 @@ for (const adapter of ["sqlite", "durable-object", "postgresql"]) {
   verifyMigrations(adapter);
 }
 
-function verifyMigrations(adapter: string): void {
+verifyMigrations("sqlite", "workspace");
+
+function verifyMigrations(adapter: string, context = "memory"): void {
   const directory = new URL(
-    `../src/modules/memory/infrastructure/persistence/${adapter}/migrations/`,
+    `../src/modules/${context}/infrastructure/persistence/${adapter}/migrations/`,
     import.meta.url,
   );
   const files = readdirSync(directory)
@@ -89,11 +91,11 @@ function verifyMigrations(adapter: string): void {
   const checksumFile = new URL("checksums.json", directory);
   if (process.argv.includes("--write")) {
     writeFileSync(checksumFile, JSON.stringify(pins, null, 2) + "\n");
-    if (adapter !== "postgresql") {
+    if (adapter !== "postgresql" && context === "memory") {
       for (const bundle of bundles) writeFileSync(bundle.file, bundle.content);
     }
     console.log(
-      `${adapter}: wrote SHA-256 pins${adapter === "postgresql" ? "" : " and SQL bundle"}.`,
+      `${context}/${adapter}: wrote SHA-256 pins${adapter === "postgresql" || context !== "memory" ? "" : " and SQL bundle"}.`,
     );
   } else {
     if (
@@ -103,7 +105,7 @@ function verifyMigrations(adapter: string): void {
       throw new Error(
         `${adapter}: migration checksum mismatch; review SQL changes before regenerating`,
       );
-    if (adapter !== "postgresql") {
+    if (adapter !== "postgresql" && context === "memory") {
       for (const bundle of bundles) {
         if (readFileSync(bundle.file, "utf8") !== bundle.content)
           throw new Error(
@@ -112,7 +114,7 @@ function verifyMigrations(adapter: string): void {
       }
     }
     console.log(
-      `${adapter}: verified ${migrations.length} migration(s), checksums${adapter === "postgresql" ? "" : ", and SQL bundle"}.`,
+      `${context}/${adapter}: verified ${migrations.length} migration(s), checksums${adapter === "postgresql" || context !== "memory" ? "" : ", and SQL bundle"}.`,
     );
   }
 }

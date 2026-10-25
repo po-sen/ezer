@@ -7,3 +7,7 @@ export type {
   MemoryWrite,
 } from "./memory/index.ts";
 export type { AccessControl, AuthorizedIndividual } from "./access/index.ts";
+export type {
+  WorkspaceOperations,
+  WorkspaceConnection,
+} from "./workspace/index.ts";

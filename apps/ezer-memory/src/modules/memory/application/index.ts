@@ -10,3 +10,4 @@ export { createMemoryOperations } from "./create-memory-operations.ts";
 export { createExportMemoryHistory } from "./export-memory-history.ts";
 export { createRestoreMemoryHistory } from "./restore-memory-history.ts";
 export { createInspectMemoryRestore } from "./inspect-memory-restore.ts";
+export { createEmbeddedMemory } from "./create-embedded-memory.ts";

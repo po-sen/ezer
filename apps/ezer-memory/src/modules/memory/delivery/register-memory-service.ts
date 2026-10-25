@@ -1,0 +1,74 @@
+import type { McpServer } from "@modelcontextprotocol/server";
+import { z } from "zod";
+import type {
+  DescribeMemoryService,
+  DescribeMemoryBinding,
+  MemoryOperations,
+} from "../ports/inbound/index.ts";
+import { registerMemoryTools } from "./register-memory-tools.ts";
+
+export function registerMemoryService(
+  server: McpServer,
+  describeService: DescribeMemoryService,
+  individualId: string,
+  binding: DescribeMemoryBinding,
+  memory: MemoryOperations,
+) {
+  server.registerTool(
+    "ezer_identity",
+    {
+      description:
+        "Identify the Ezer bound to this authenticated connection. This is a stable identity, not a session or a personality summary.",
+      inputSchema: z.strictObject({}),
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async () => {
+      try {
+        const result = await binding.execute(individualId);
+        if (!result.ok)
+          return {
+            isError: true,
+            content: [{ type: "text", text: result.code }],
+          };
+        return {
+          content: [{ type: "text", text: JSON.stringify(result.value) }],
+          structuredContent: { ...result.value },
+        };
+      } catch {
+        return {
+          isError: true,
+          content: [{ type: "text", text: "INTERNAL_ERROR" }],
+        };
+      }
+    },
+  );
+
+  server.registerTool(
+    "ezer_service_info",
+    {
+      description:
+        "Describe the Ezer memory service and its available capabilities.",
+      inputSchema: z.strictObject({}),
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    () => {
+      const result = describeService.execute();
+      return {
+        content: [{ type: "text", text: JSON.stringify(result) }],
+        structuredContent: { ...result },
+      };
+    },
+  );
+
+  registerMemoryTools(server, memory);
+}

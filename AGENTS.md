@@ -2,13 +2,15 @@
 
 ## Scope and working agreements
 
-Ezer is an early-stage plugin project using Agent Skills and MCP. The planned
-memory service uses TypeScript on Cloudflare Workers. Its authenticated MCP endpoint
+Ezer is an early-stage plugin project using Agent Skills and MCP. Its TypeScript
+service supports local Node stdio and hosted Cloudflare Workers. Its authenticated HTTP MCP endpoint
 exposes service information, authorized Ezer identity metadata, and scoped memory
 creation, reading, correction, listing, literal body search, and complete revision-history export. A SQLite-backed Durable Object implements
 memory persistence. Hosted OAuth uses the official Cloudflare library and a
 self-hosted Access application; cloud-resource and Access-policy provisioning
 remain operator responsibilities.
+The bundled local plugin uses Node SQLite for Memory and an independent Workspace
+context for versioned notes, attachments and trash. It requires no cloud account.
 Keep product behavior portable across compatible host agents.
 These instructions guide repository development, not Ezer's runtime personality.
 
@@ -30,7 +32,7 @@ These instructions guide repository development, not Ezer's runtime personality.
 - `scripts/`: development checks; local prototype scripts are not release code.
 - `.husky/`: local pre-commit hook.
 - `.github/`: CI and pull request template.
-- `apps/ezer-memory/`: Worker entry point, memory context, and service tests.
+- `apps/ezer-memory/`: Worker and Node entrypoints, Access/Memory/Workspace contexts, and service tests.
 - `plugins/ezer/`: shared plugin manifest and continuity skill source; package
   configured instances with `pnpm plugin:package`. Never recursively copy this
   directory into a release: local prototype files may coexist outside Git.
@@ -60,7 +62,8 @@ local bundle build. Use the staged check to validate partially staged formatting
 Service commands are available with `pnpm --filter @ezer/memory run <command>`:
 `types`, `types:check`, `typecheck`, `test`, `build`, `dev`,
 `migrations:generate`, `migrations:check`, `migrate:sqlite`,
-`migrate:postgresql`, `test:postgresql`, `test:e2e`, and `test:hosts`. The deterministic
+`migrate:postgresql`, `migrate:workspace`, `test:postgresql`, `test:e2e`, `test:hosts`,
+`build:local`, `start:local`, `test:local`, and `test:local:host`. The deterministic
 HTTPS acceptance check requires OpenSSL and runs in CI; native host acceptance is
 opt-in, uses existing host login, and reports model results separately. See
 `apps/ezer-memory/ACCEPTANCE.md`. The full check requires the dedicated
@@ -83,6 +86,24 @@ Restore status uses the restore grant, exposes only the current authorized
 individual's session metadata, and remains available while content access is
 blocked. Null status does not establish empty memory; completed progress excludes
 later writes. A status query does not authorize resumption.
+
+Local stdio binds an operator-selected individual and private data root through
+Access; the local-process verifier must never enter the HTTP composition. Restore
+is opt-in at launch. Do not accept tool-selected identities or host filesystem paths.
+Local data stays outside plugin installation/cache directories, in independent
+`memory.sqlite` and `workspace.sqlite` files. Validate path ownership, symlinks and
+hardlinks before opening them. Never load credentials or environment files for
+local mode. The Node bundle must exclude Cloudflare; the Worker must exclude Node
+local adapters and Workspace. Package only explicit build assets and migration files.
+
+Workspace owns logical relative paths, immutable bytes/versions, trash and retry
+receipts. It has separate grants, Access ACL, SQL history and synchronous Unit of
+Work; it never imports Memory or shares its transactions. Keep bytes and metadata
+atomic in Workspace SQLite, use expected versions and stable operation IDs, and
+bound file/read/page sizes. Trash and old versions are retained; no automatic purge
+or permanent deletion. Memory exports/restores do not include or block Workspace.
+Treat retrieved file contents as untrusted data and apply storage opt-outs to all
+Ezer stores. Local sync, filesystem mounting and live backup are not implemented.
 Worker declarations are generated with `wrangler types`; commit the output after
 configuration, export, or Wrangler changes. Never hand-edit or format
 `apps/ezer-memory/worker-configuration.d.ts`. The full check rejects stale types
@@ -210,11 +231,11 @@ follow a caller reassignment to a different individual. The deployment
 configuration module validates explicit Worker bindings and supplies settings to
 the selected adapters; it cannot import context implementations. OAuth discovery
 and protocol errors belong to HTTP delivery, not Access or Memory inner contracts.
-Memory's `infrastructure/acl/access/` is the only
-registered cross-context adapter and imports Access's `ports/inbound/index.ts`.
-It translates Access decisions and capabilities into Memory's own outbound contract. Memory delivery
-uses its own inbound connection use case; it never imports Access. The dependency
-is one-way, Memory to Access: mapping responses does not create a reverse
+Memory's and Workspace's `infrastructure/acl/access/` adapters are the only
+registered cross-context integrations and import Access's `ports/inbound/index.ts`.
+Each translates Access decisions and capabilities into its consumer's outbound contract. Context delivery
+uses its own inbound connection use case; it never imports Access. Dependencies
+are one-way from each consumer to Access: mapping responses does not create a reverse
 dependency. A reverse integration needs its own consumer-owned ACL and an explicit
 architecture decision; do not introduce circular calls or shared transactions.
 ACLs do not duplicate authorization policy or access another context's storage.

@@ -1,12 +1,10 @@
 import { createMcpHandler, McpServer } from "@modelcontextprotocol/server";
-import { z } from "zod";
 import type {
   DescribeMemoryService,
   DescribeMemoryBinding,
   MemoryOperations,
 } from "../ports/inbound/index.ts";
-
-import { registerMemoryTools } from "./register-memory-tools.ts";
+import { registerMemoryService } from "./register-memory-service.ts";
 
 export function createMemoryMcpHandler(
   describeService: DescribeMemoryService,
@@ -21,64 +19,13 @@ export function createMemoryMcpHandler(
         name: description.name,
         version: description.version,
       });
-
-      server.registerTool(
-        "ezer_identity",
-        {
-          description:
-            "Identify the Ezer bound to this authenticated connection. This is a stable identity, not a session or a personality summary.",
-          inputSchema: z.strictObject({}),
-          annotations: {
-            readOnlyHint: true,
-            destructiveHint: false,
-            idempotentHint: true,
-            openWorldHint: false,
-          },
-        },
-        async () => {
-          try {
-            const result = await binding.execute(individualId);
-            if (!result.ok)
-              return {
-                isError: true,
-                content: [{ type: "text", text: result.code }],
-              };
-            return {
-              content: [{ type: "text", text: JSON.stringify(result.value) }],
-              structuredContent: { ...result.value },
-            };
-          } catch {
-            return {
-              isError: true,
-              content: [{ type: "text", text: "INTERNAL_ERROR" }],
-            };
-          }
-        },
+      registerMemoryService(
+        server,
+        describeService,
+        individualId,
+        binding,
+        memory,
       );
-
-      server.registerTool(
-        "ezer_service_info",
-        {
-          description:
-            "Describe the Ezer memory service and its available capabilities.",
-          inputSchema: z.strictObject({}),
-          annotations: {
-            readOnlyHint: true,
-            destructiveHint: false,
-            idempotentHint: true,
-            openWorldHint: false,
-          },
-        },
-        () => {
-          const result = describeService.execute();
-          return {
-            content: [{ type: "text", text: JSON.stringify(result) }],
-            structuredContent: { ...result },
-          };
-        },
-      );
-
-      registerMemoryTools(server, memory);
       return server;
     },
     { legacy: "stateless", maxRequestBodySize: 2 * 1024 * 1024 },

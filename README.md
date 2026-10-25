@@ -8,18 +8,36 @@ The host agent provides reasoning, while an independent memory service stores
 experiences. The agent decides what to remember and how to organize its memories
 through use.
 
-The project is in early development. The [plugin alpha](plugins/ezer/README.md)
-can be packaged for Codex and Claude Code with an operator-supplied memory endpoint.
-A deployed service and compatible end-user login are still required before use.
+The [plugin alpha](plugins/ezer/README.md) can run locally with Node.js and SQLite,
+including a persistent file workspace with versions and trash. It can also connect
+to an operator-supplied remote memory endpoint. The local mode needs no Cloudflare
+account, OAuth setup, listening port, or database server.
+
+## Use locally
+
+On a development machine with Node.js 24.5 or newer and the pinned pnpm version:
+
+```sh
+pnpm install --frozen-lockfile
+pnpm plugin:package --name ezer-personal --local --individual personal --out dist/ezer-personal
+```
+
+Install the generated marketplace on the **machine running your agent**, following
+its README. The installed local plugin needs Node.js 24.5+ on PATH, but no pnpm or
+dependency install. Explicitly activate its skill in a new conversation.
+Data stays in `~/.ezer/individuals/personal/`, independently of plugin upgrades
+and uninstall. Another instance ID gets separate databases; two local agents using
+the same ID and data directory share one Ezer. Local mode does not synchronize
+different computers. See the [plugin guide](plugins/ezer/README.md) for both modes.
 
 ## Development
 
-The memory service uses TypeScript and targets Cloudflare Workers. The
-repository includes a SQLite-backed Durable Object memory core, OAuth access-token
+The memory service uses TypeScript with separate Node stdio and Cloudflare Worker
+entrypoints. The repository includes SQLite and Durable Object memory adapters, OAuth access-token
 validation, and scoped MCP tools for sourced memories, corrections, reading, and
 pagination. The plugin includes startup recovery and agent-managed memory skills.
-An end-user login deployment is not provided yet. Installing a generated plugin
-does not require these development dependencies.
+Remote login provisioning remains an operator responsibility. Installing a
+generated plugin does not require the development dependencies.
 
 Use Node.js 24.5 or later and pnpm 12.6.0, pinned in the root `packageManager`
 field. Install that pnpm version using the [official installation guide](https://pnpm.io/installation).
@@ -51,7 +69,7 @@ and domain boundaries. The root owns shared development commands and Git hooks.
 
 `plugins/ezer/` contains shared plugin metadata and skill source. Run
 `pnpm plugin:package --help` to generate an instance package with native host
-manifests and an explicit remote MCP endpoint. Local architecture drafts and
+manifests and either a bundled local MCP server or an explicit remote endpoint. Local architecture drafts and
 Python portability prototypes remain excluded from releases.
 Skills and MCP configuration do not need a JavaScript workspace
 unless they acquire a build step. Add `packages/` only when reusable code has an
@@ -99,8 +117,8 @@ This checks all indexed paths before formatting supported tracked files, even
 when no changes are staged. It reads working-tree contents and excludes untracked
 drafts. Stage intended new files before running it; use `check:staged` to validate
 a partially staged commit. Neither command reformats files. The full check also
-runs plugin packaging tests, service type checks, tests, a local Worker bundle build,
-and an HTTPS acceptance check with synthetic identities. OpenSSL with `req -addext`
+runs plugin packaging tests, service type checks, tests, local Node and Worker builds,
+stdio persistence/workspace checks, and an HTTPS acceptance check with synthetic identities. OpenSSL with `req -addext`
 support is required. Optional [native host acceptance](apps/ezer-memory/ACCEPTANCE.md)
 runs separately because it invokes real models and needs host login. The full check requires the
 dedicated PostgreSQL test service described in the service README.
